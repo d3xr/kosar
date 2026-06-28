@@ -83,7 +83,7 @@ ESP32 делает:
 - при потере свежего CRSF пакета отправляет `0,0`;
 - при аварии перестает слать команды, чтобы EFeru serial timeout тоже остановил моторы.
 
-Референс библиотеки: https://github.com/AlfredoSystems/AlfredoCRSF
+Референс библиотеки: [AlfredoSystems/AlfredoCRSF](https://github.com/AlfredoSystems/AlfredoCRSF)
 
 Verdict: `PASS` как основной путь, если приемники только serial CRSF.
 

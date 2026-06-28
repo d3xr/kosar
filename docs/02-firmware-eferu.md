@@ -1,6 +1,6 @@
 # EFeru Firmware Notes
 
-Основной кандидат: https://github.com/EFeru/hoverboard-firmware-hack-FOC
+Основной кандидат: [EFeru/hoverboard-firmware-hack-FOC](https://github.com/EFeru/hoverboard-firmware-hack-FOC)
 
 Проверено 2026-06-28:
 
