@@ -19,3 +19,6 @@ jobs:
         with:
           globs: |
             **/*.md
+            !firmware/upstream/**
+            !tmp/**
+            !temp/**
