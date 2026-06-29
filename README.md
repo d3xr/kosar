@@ -1,58 +1,66 @@
 # Косарь
 
-RC-переделка аккумуляторной Greenworks 48V в управляемую тяговую платформу на мотор-колесах от 10" гироскутера.
+Гаражный RC-проект: берём Greenworks, донорский 10" гироскутер, RadioMaster Boxer ELRS и делаем странную, полезную, потенциально опасную тележку, которая сначала просто едет.
 
-## Статус
+Дух проекта: **строим из того, что есть, но не тупим там, где можно спалить плату или пальцы**.
 
-Дата фиксации: 2026-06-28.
+## Кто я в этой вселенной
 
-Этап 1: прошить плату гироскутера, добиться предсказуемого дистанционного движения на родной гироскутерной платформе, затем перенести ходовую на Greenworks. Нож Greenworks на MVP физически отключен и не участвует в тестах.
+Я тут не завлаб и не Scrum-мастер. Я — твой бортовой инженер из мастерской: держу карту проводов, помню команды, проверяю “это сейчас не бахнет?”, а ты крутишь железо и принимаешь решения.
 
-## Архитектура MVP
+Моя работа:
 
-- Ходовая: два мотор-колеса от 10" гироскутера.
-- Контроллер: родная Gen1-плата гироскутера, предположительно `GD32F103RCT6`.
-- Прошивка: `EFeru/hoverboard-firmware-hack-FOC`.
-- Питание привода: родная 10S батарея гироскутера, около 36V nominal / 42V full.
-- Питание ножа Greenworks: отдельная штатная система, на первом этапе отключена.
-- Радио: RadioMaster Boxer ELRS; конкретный тракт зависит от приемника.
+- убирать туман;
+- давать короткие следующие шаги;
+- не превращать фановую сборку в диплом;
+- останавливать только там, где реально можно сжечь железо или сделать опасную штуку.
 
-## Главные решения
+## Текущий квест
 
-- Не подавать Greenworks 48V на плату гироскутера: полный заряд около 54V выше нормального диапазона generic hoverboard-плат.
-- Не начинать с автономии, RTK, OpenMower или режущего узла.
-- Не вендорить чужие firmware-репозитории в этот repo до лицензионного и архитектурного решения.
-- Для прямого RC без ESP32 использовать только тот вход, который реально поддерживает приемник: PWM/PPM/iBUS.
-- Для типичного ELRS serial receiver основной путь после проверки железа: `CRSF -> ESP32 -> EFeru UART`.
+Ты разобрал гироскутер. Прошивальщик едет.
 
-## Документы
+Сейчас задача не “собрать робота-косилку”. Сейчас задача:
 
-- [Stage 1 RC bring-up](docs/01-stage-1-rc-bringup.md)
-- [EFeru firmware notes](docs/02-firmware-eferu.md)
-- [RC / ELRS decision](docs/03-rc-elrs-decision.md)
-- [Safety gates and test matrix](docs/04-safety-and-test-matrix.md)
-- [GitHub research](docs/05-github-research.md)
-- [Inventory and open questions](docs/06-inventory-and-open-questions.md)
-- [Simple flash and wiring](docs/07-simple-flash-and-wiring.md)
-- [ADR-0001: Stage 1 control path](docs/adr-0001-stage-1-control-path.md)
+1. найти точки `GND / SWDIO / SWCLK`;
+2. прошить плату;
+3. заставить колёса крутиться в воздухе;
+4. подключить RC;
+5. убедиться, что при потере связи оно останавливается.
 
-## Agent Docs
+Нож Greenworks пока не существует. Он в другой серии.
 
-- [AGENTS.md](AGENTS.md) — project-local правила работы агентов.
-- [agent_docs/index.md](agent_docs/index.md) — навигация по процессной документации.
-- [agent_docs/architecture.md](agent_docs/architecture.md) — текущая архитектурная карта.
-- [agent_docs/development-history/](agent_docs/development-history/) — атомарная история итераций.
-- [agent_docs/adr/](agent_docs/adr/) — атомарный журнал решений.
+## Что уже готово на Mac
 
-## Current Verdicts
+Поставлено:
 
-| Gate | Verdict | Комментарий |
-|---|---:|---|
-| Product / Scope | PASS | Этап 1 ограничен ходовой RC-платформой без ножа и автономии. |
-| Architect | WARN | Нужно подтвердить Gen1-плату фото и прозвонкой разъемов. |
-| Domain / RC | WARN | ELRS CRSF не является PPM/iBUS; нужен конкретный приемник или ESP32 bridge. |
-| Firmware | WARN | EFeru подходит, но Gen1/pinout/sideboard polarity еще нужно подтвердить физически. |
-| QA / Safety | WARN | Failsafe, e-stop, питание приемника и лимиты еще не доказаны тестом. |
-| Release / GitOps | PASS | Пока только локальная документация и первый git commit. |
+```bash
+brew install openocd stlink platformio
+```
 
-`UNKNOWN` не считается `PASS`; пока незакрытые gates блокируют тест на земле.
+Склонирована прошивка:
+
+```bash
+firmware/upstream/hoverboard-firmware-hack-FOC
+```
+
+Собран безопасный PWM-билд:
+
+```bash
+firmware/upstream/hoverboard-firmware-hack-FOC/.pio/build/VARIANT_PWM/firmware.bin
+```
+
+Патч с “детским режимом” лежит тут:
+
+```bash
+firmware/patches/stage1-safe-pwm-config.patch
+```
+
+## Главный документ
+
+Вся практическая инструкция теперь одна:
+
+[docs/garage-runbook.md](docs/garage-runbook.md)
+
+## Короткое правило
+
+Если непонятно, куда паять, не паять. Сначала фото платы крупно, потом разметка, потом паяльник.
