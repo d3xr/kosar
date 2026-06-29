@@ -30,6 +30,13 @@ static constexpr size_t CRSF_MAX_FRAME_SIZE = 64;
 static constexpr size_t CRSF_CHANNEL_PAYLOAD_SIZE = 22;
 static constexpr size_t CRSF_CHANNEL_COUNT = 16;
 
+static constexpr size_t CH_ROLL = 0;
+static constexpr size_t CH_PITCH = 1;
+static constexpr size_t CH_ARM = 4;
+static constexpr size_t CH_MODE = 5;
+static constexpr int RC_CENTER_US = 1500;
+static constexpr int RC_DEADBAND_US = 35;
+
 HardwareSerial crsfSerial(1);
 WebServer server(80);
 
@@ -69,11 +76,14 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 .pill{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 9px;min-width:92px;text-align:center}
 .pill b{display:block;font-size:17px}.pill span{color:var(--muted);font-size:12px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.metric{border:1px solid var(--line);border-radius:7px;padding:8px;background:#111512}.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.metric span{color:var(--muted);font-size:12px}
 .ch{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px;display:grid;grid-template-columns:64px minmax(90px,160px) 1fr 72px;gap:10px;align-items:center;min-height:54px}
 .idx{color:var(--muted);font-weight:700}.label{width:100%;border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:8px;font:inherit}
 .bar{height:16px;border-radius:5px;background:#0a0c0b;border:1px solid #283029;overflow:hidden}.fill{height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--hot));transition:width .08s linear}
 .value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}.dead .fill{background:var(--bad)}.dead #link{color:var(--bad)}
-@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}}
+@media (max-width:920px){.control{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}.control{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -90,6 +100,14 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
     <div class="pill"><b id="crc">0</b><span>crc fail</span></div>
   </div>
 </header>
+<section class="control">
+  <div class="metric"><b id="armed">NO</b><span>armed</span></div>
+  <div class="metric"><b id="mode">1</b><span>mode</span></div>
+  <div class="metric"><b id="speed">0</b><span>speed cmd</span></div>
+  <div class="metric"><b id="steer">0</b><span>steer cmd</span></div>
+  <div class="metric"><b id="left">0</b><span>left motor</span></div>
+  <div class="metric"><b id="right">0</b><span>right motor</span></div>
+</section>
 <section class="grid" id="channels"></section>
 </main>
 <script>
@@ -112,6 +130,12 @@ async function tick(){
     document.getElementById('age').textContent=d.age_ms;
     document.getElementById('frames').textContent=d.frames;
     document.getElementById('crc').textContent=d.crc_fail;
+    document.getElementById('armed').textContent=d.control.armed?'YES':'NO';
+    document.getElementById('mode').textContent=d.control.mode;
+    document.getElementById('speed').textContent=d.control.speed;
+    document.getElementById('steer').textContent=d.control.steer;
+    document.getElementById('left').textContent=d.control.left;
+    document.getElementById('right').textContent=d.control.right;
     d.channels.forEach((ch,i)=>{
       const row=root.children[i];
       const pct=Math.max(0,Math.min(100,(ch.us-988)/(2012-988)*100));
@@ -149,6 +173,27 @@ bool isLikelyAddress(uint8_t value) {
 uint16_t crsfToMicroseconds(uint16_t raw) {
   int32_t us = ((static_cast<int32_t>(raw) - 992) * 5 / 8) + 1500;
   return static_cast<uint16_t>(constrain(us, 880, 2120));
+}
+
+int16_t rcToCommand(uint16_t us, int16_t limit) {
+  const int delta = static_cast<int>(us) - RC_CENTER_US;
+  if (abs(delta) <= RC_DEADBAND_US) {
+    return 0;
+  }
+
+  const int input = delta > 0 ? delta - RC_DEADBAND_US : delta + RC_DEADBAND_US;
+  const int inputMax = 500 - RC_DEADBAND_US;
+  return static_cast<int16_t>(constrain((input * limit) / inputMax, -limit, limit));
+}
+
+uint16_t modeSpeedLimit(uint16_t modeUs) {
+  if (modeUs < 1300) {
+    return 80;
+  }
+  if (modeUs < 1700) {
+    return 160;
+  }
+  return 260;
 }
 
 void decodeChannels(const uint8_t *payload, size_t len) {
@@ -242,9 +287,17 @@ void handleApiChannels() {
   const uint32_t now = millis();
   const uint32_t ageMs = lastFrameMs == 0 ? 999999 : now - lastFrameMs;
   const bool link = lastFrameMs != 0 && ageMs < 500;
+  const bool armSwitch = channelsUs[CH_ARM] > 1500;
+  const bool armed = link && armSwitch;
+  const uint16_t speedLimit = modeSpeedLimit(channelsUs[CH_MODE]);
+  const int16_t speedCmd = armed ? rcToCommand(channelsUs[CH_PITCH], speedLimit) : 0;
+  const int16_t steerCmd = armed ? rcToCommand(channelsUs[CH_ROLL], speedLimit) : 0;
+  const int16_t leftCmd = constrain(speedCmd + steerCmd, -static_cast<int>(speedLimit), static_cast<int>(speedLimit));
+  const int16_t rightCmd = constrain(speedCmd - steerCmd, -static_cast<int>(speedLimit), static_cast<int>(speedLimit));
+  const uint8_t mode = channelsUs[CH_MODE] < 1300 ? 1 : channelsUs[CH_MODE] < 1700 ? 2 : 3;
 
   String json;
-  json.reserve(900);
+  json.reserve(1100);
   json += "{\"link\":";
   json += link ? "true" : "false";
   json += ",\"age_ms\":";
@@ -255,6 +308,21 @@ void handleApiChannels() {
   json += crcFailCount;
   json += ",\"bad_frames\":";
   json += badFrameCount;
+  json += ",\"control\":{\"armed\":";
+  json += armed ? "true" : "false";
+  json += ",\"mode\":";
+  json += mode;
+  json += ",\"limit\":";
+  json += speedLimit;
+  json += ",\"speed\":";
+  json += speedCmd;
+  json += ",\"steer\":";
+  json += steerCmd;
+  json += ",\"left\":";
+  json += leftCmd;
+  json += ",\"right\":";
+  json += rightCmd;
+  json += '}';
   json += ",\"channels\":[";
   for (size_t i = 0; i < CRSF_CHANNEL_COUNT; i++) {
     if (i > 0) {
