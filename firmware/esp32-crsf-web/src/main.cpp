@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -316,6 +317,10 @@ void setup() {
   server.on("/", HTTP_GET, handleIndex);
   server.on("/api/channels", HTTP_GET, handleApiChannels);
   server.begin();
+
+  if (MDNS.begin("kosar")) {
+    Serial.println("mDNS: http://kosar.local/");
+  }
 
   Serial.print("CRSF RX pin: GPIO");
   Serial.println(CRSF_RX_PIN);
