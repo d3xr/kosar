@@ -7,8 +7,8 @@
 #include "wifi_local.h"
 #endif
 
-static constexpr int CRSF_RX_PIN = 32;
-static constexpr int CRSF_TX_PIN = 33;
+static constexpr int CRSF_RX_PIN = 16;
+static constexpr int CRSF_TX_PIN = 17;
 static constexpr uint32_t CRSF_BAUD = 420000;
 
 static constexpr const char *AP_SSID = "Kosar-RC";
