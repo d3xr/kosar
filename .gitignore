@@ -6,6 +6,7 @@
 logs/
 tmp/
 firmware/upstream/
+firmware/esp32-crsf-web/src/wifi_local.h
 .pio/
 *.bin
 *.elf

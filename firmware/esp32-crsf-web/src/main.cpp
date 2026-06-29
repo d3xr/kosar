@@ -2,12 +2,24 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
+#if __has_include("wifi_local.h")
+#include "wifi_local.h"
+#endif
+
 static constexpr int CRSF_RX_PIN = 16;
 static constexpr int CRSF_TX_PIN = -1;
 static constexpr uint32_t CRSF_BAUD = 420000;
 
 static constexpr const char *AP_SSID = "Kosar-RC";
 static constexpr const char *AP_PASS = "kosar1234";
+
+#ifndef KOSAR_WIFI_SSID
+#define KOSAR_WIFI_SSID ""
+#endif
+
+#ifndef KOSAR_WIFI_PASS
+#define KOSAR_WIFI_PASS ""
+#endif
 
 static constexpr uint8_t CRSF_ADDRESS_FLIGHT_CONTROLLER = 0xC8;
 static constexpr uint8_t CRSF_ADDRESS_CRSF_RECEIVER = 0xEC;
@@ -258,6 +270,39 @@ void handleApiChannels() {
   server.send(200, "application/json", json);
 }
 
+void startWifi() {
+  if (strlen(KOSAR_WIFI_SSID) > 0) {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(KOSAR_WIFI_SSID, KOSAR_WIFI_PASS);
+
+    Serial.print("Connecting to Wi-Fi: ");
+    Serial.println(KOSAR_WIFI_SSID);
+
+    const uint32_t startedAt = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 10000) {
+      delay(250);
+      Serial.print(".");
+    }
+    Serial.println();
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.print("STA IP: ");
+      Serial.println(WiFi.localIP());
+      return;
+    }
+
+    Serial.println("Home Wi-Fi failed, falling back to AP");
+  }
+
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(AP_SSID, AP_PASS);
+
+  Serial.print("AP: ");
+  Serial.println(AP_SSID);
+  Serial.print("AP IP: ");
+  Serial.println(WiFi.softAPIP());
+}
+
 void setup() {
   Serial.begin(115200);
   delay(250);
@@ -266,17 +311,12 @@ void setup() {
 
   crsfSerial.begin(CRSF_BAUD, SERIAL_8N1, CRSF_RX_PIN, CRSF_TX_PIN);
 
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(AP_SSID, AP_PASS);
+  startWifi();
 
   server.on("/", HTTP_GET, handleIndex);
   server.on("/api/channels", HTTP_GET, handleApiChannels);
   server.begin();
 
-  Serial.print("AP: ");
-  Serial.println(AP_SSID);
-  Serial.print("IP: ");
-  Serial.println(WiFi.softAPIP());
   Serial.print("CRSF RX pin: GPIO");
   Serial.println(CRSF_RX_PIN);
 }
