@@ -10,6 +10,9 @@
 static constexpr int CRSF_RX_PIN = 16;
 static constexpr int CRSF_TX_PIN = 17;
 static constexpr uint32_t CRSF_BAUD = 420000;
+static constexpr int VBAT_ADC_PIN = 35;
+static constexpr float VBAT_R_TOP = 390000.0f;
+static constexpr float VBAT_R_BOTTOM = 27000.0f;
 
 static constexpr const char *AP_SSID = "Kosar-RC";
 static constexpr const char *AP_PASS = "kosar1234";
@@ -75,6 +78,8 @@ uint32_t lastFrameMs = 0;
 uint32_t frameCount = 0;
 uint32_t crcFailCount = 0;
 uint32_t badFrameCount = 0;
+float batteryVoltage = 0.0f;
+uint32_t lastBatterySampleMs = 0;
 
 enum class ParserState {
   WaitAddress,
@@ -105,7 +110,7 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 .pill{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 9px;min-width:92px;text-align:center}
 .pill b{display:block;font-size:17px}.pill span{color:var(--muted);font-size:12px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+.control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
 .metric{border:1px solid var(--line);border-radius:7px;padding:8px;background:#111512}.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.metric span{color:var(--muted);font-size:12px}
 .ch{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px;display:grid;grid-template-columns:64px minmax(90px,160px) 1fr 72px;gap:10px;align-items:center;min-height:54px}
 .idx{color:var(--muted);font-weight:700}.label{width:100%;border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:8px;font:inherit}
@@ -137,6 +142,7 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
   <div class="metric"><b id="steer">0</b><span>steer cmd</span></div>
   <div class="metric"><b id="left">0</b><span>left motor</span></div>
   <div class="metric"><b id="right">0</b><span>right motor</span></div>
+  <div class="metric"><b id="battery">--.-</b><span>battery V</span></div>
 </section>
 <section class="grid" id="channels"></section>
 </main>
@@ -167,6 +173,7 @@ async function tick(){
     document.getElementById('steer').textContent=d.control.steer;
     document.getElementById('left').textContent=d.control.left;
     document.getElementById('right').textContent=d.control.right;
+    document.getElementById('battery').textContent=d.battery_v.toFixed(1);
     d.channels.forEach((ch,i)=>{
       const row=root.children[i];
       const pct=Math.max(0,Math.min(100,(ch.us-988)/(2012-988)*100));
@@ -360,6 +367,23 @@ void handleIndex() {
   server.send_P(200, "text/html", INDEX_HTML);
 }
 
+void updateBatteryVoltage() {
+  const uint32_t now = millis();
+  if (now - lastBatterySampleMs < 200) {
+    return;
+  }
+  lastBatterySampleMs = now;
+
+  uint32_t mvSum = 0;
+  for (uint8_t i = 0; i < 8; i++) {
+    mvSum += analogReadMilliVolts(VBAT_ADC_PIN);
+  }
+
+  const float adcVoltage = (mvSum / 8.0f) / 1000.0f;
+  const float divider = (VBAT_R_TOP + VBAT_R_BOTTOM) / VBAT_R_BOTTOM;
+  batteryVoltage = adcVoltage * divider;
+}
+
 void handleApiChannels() {
   String json;
   json.reserve(1100);
@@ -373,6 +397,8 @@ void handleApiChannels() {
   json += crcFailCount;
   json += ",\"bad_frames\":";
   json += badFrameCount;
+  json += ",\"battery_v\":";
+  json += String(batteryVoltage, 2);
   json += ",\"control\":{\"armed\":";
   json += driveMix.armed ? "true" : "false";
   json += ",\"mode\":";
@@ -451,6 +477,9 @@ void setup() {
   Serial.println();
   Serial.println("Kosar RC Bench boot");
 
+  analogReadResolution(12);
+  analogSetPinAttenuation(VBAT_ADC_PIN, ADC_11db);
+
   crsfSerial.begin(CRSF_BAUD, SERIAL_8N1, CRSF_RX_PIN, CRSF_TX_PIN);
 
   startWifi();
@@ -470,5 +499,6 @@ void setup() {
 void loop() {
   readCrsf();
   updateDriveMix();
+  updateBatteryVoltage();
   server.handleClient();
 }
