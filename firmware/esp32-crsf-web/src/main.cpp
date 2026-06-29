@@ -37,8 +37,37 @@ static constexpr size_t CH_MODE = 5;
 static constexpr int RC_CENTER_US = 1500;
 static constexpr int RC_DEADBAND_US = 35;
 
+struct DriveProfile {
+  const char *name;
+  int16_t maxCommand;
+  int16_t accelPerSec;
+  int16_t steerPerSec;
+};
+
+static constexpr DriveProfile DRIVE_PROFILES[] = {
+  {"turtle", 100, 120, 180},
+  {"normal", 240, 420, 520},
+  {"full", 420, 1200, 1200},
+};
+
+struct DriveMix {
+  bool link = false;
+  bool armed = false;
+  uint32_t ageMs = 999999;
+  uint8_t mode = 1;
+  const DriveProfile *profile = &DRIVE_PROFILES[0];
+  int16_t targetSpeed = 0;
+  int16_t targetSteer = 0;
+  int16_t speed = 0;
+  int16_t steer = 0;
+  int16_t left = 0;
+  int16_t right = 0;
+  uint32_t lastUpdateMs = 0;
+};
+
 HardwareSerial crsfSerial(1);
 WebServer server(80);
+DriveMix driveMix;
 
 uint16_t channelsRaw[CRSF_CHANNEL_COUNT] = {};
 uint16_t channelsUs[CRSF_CHANNEL_COUNT] = {};
@@ -76,7 +105,7 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 .pill{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 9px;min-width:92px;text-align:center}
 .pill b{display:block;font-size:17px}.pill span{color:var(--muted);font-size:12px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
 .metric{border:1px solid var(--line);border-radius:7px;padding:8px;background:#111512}.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.metric span{color:var(--muted);font-size:12px}
 .ch{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px;display:grid;grid-template-columns:64px minmax(90px,160px) 1fr 72px;gap:10px;align-items:center;min-height:54px}
 .idx{color:var(--muted);font-weight:700}.label{width:100%;border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:8px;font:inherit}
@@ -102,7 +131,8 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 </header>
 <section class="control">
   <div class="metric"><b id="armed">NO</b><span>armed</span></div>
-  <div class="metric"><b id="mode">1</b><span>mode</span></div>
+  <div class="metric"><b id="profile">turtle</b><span>profile</span></div>
+  <div class="metric"><b id="accel">0</b><span>accel/s</span></div>
   <div class="metric"><b id="speed">0</b><span>speed cmd</span></div>
   <div class="metric"><b id="steer">0</b><span>steer cmd</span></div>
   <div class="metric"><b id="left">0</b><span>left motor</span></div>
@@ -131,7 +161,8 @@ async function tick(){
     document.getElementById('frames').textContent=d.frames;
     document.getElementById('crc').textContent=d.crc_fail;
     document.getElementById('armed').textContent=d.control.armed?'YES':'NO';
-    document.getElementById('mode').textContent=d.control.mode;
+    document.getElementById('profile').textContent=d.control.profile;
+    document.getElementById('accel').textContent=d.control.accel;
     document.getElementById('speed').textContent=d.control.speed;
     document.getElementById('steer').textContent=d.control.steer;
     document.getElementById('left').textContent=d.control.left;
@@ -186,14 +217,60 @@ int16_t rcToCommand(uint16_t us, int16_t limit) {
   return static_cast<int16_t>(constrain((input * limit) / inputMax, -limit, limit));
 }
 
-uint16_t modeSpeedLimit(uint16_t modeUs) {
+uint8_t modeFromUs(uint16_t modeUs) {
   if (modeUs < 1300) {
-    return 80;
+    return 1;
   }
   if (modeUs < 1700) {
-    return 160;
+    return 2;
   }
-  return 260;
+  return 3;
+}
+
+int16_t stepToward(int16_t current, int16_t target, int16_t ratePerSec, uint32_t dtMs) {
+  const int32_t delta = static_cast<int32_t>(target) - current;
+  const int32_t maxStep = max<int32_t>(1, (static_cast<int32_t>(ratePerSec) * dtMs) / 1000);
+  if (delta > maxStep) {
+    return current + maxStep;
+  }
+  if (delta < -maxStep) {
+    return current - maxStep;
+  }
+  return target;
+}
+
+void updateDriveMix() {
+  const uint32_t now = millis();
+  const uint32_t dtMs = driveMix.lastUpdateMs == 0 ? 0 : now - driveMix.lastUpdateMs;
+  driveMix.lastUpdateMs = now;
+
+  driveMix.ageMs = lastFrameMs == 0 ? 999999 : now - lastFrameMs;
+  driveMix.link = lastFrameMs != 0 && driveMix.ageMs < 500;
+  driveMix.armed = driveMix.link && channelsUs[CH_ARM] > 1500;
+  driveMix.mode = modeFromUs(channelsUs[CH_MODE]);
+  driveMix.profile = &DRIVE_PROFILES[driveMix.mode - 1];
+
+  driveMix.targetSpeed = driveMix.armed ? rcToCommand(channelsUs[CH_PITCH], driveMix.profile->maxCommand) : 0;
+  driveMix.targetSteer = driveMix.armed ? rcToCommand(channelsUs[CH_ROLL], driveMix.profile->maxCommand) : 0;
+
+  if (!driveMix.armed) {
+    driveMix.speed = 0;
+    driveMix.steer = 0;
+  } else {
+    driveMix.speed = stepToward(driveMix.speed, driveMix.targetSpeed, driveMix.profile->accelPerSec, dtMs);
+    driveMix.steer = stepToward(driveMix.steer, driveMix.targetSteer, driveMix.profile->steerPerSec, dtMs);
+  }
+
+  driveMix.left = constrain(
+    driveMix.speed + driveMix.steer,
+    -static_cast<int>(driveMix.profile->maxCommand),
+    static_cast<int>(driveMix.profile->maxCommand)
+  );
+  driveMix.right = constrain(
+    driveMix.speed - driveMix.steer,
+    -static_cast<int>(driveMix.profile->maxCommand),
+    static_cast<int>(driveMix.profile->maxCommand)
+  );
 }
 
 void decodeChannels(const uint8_t *payload, size_t len) {
@@ -284,24 +361,12 @@ void handleIndex() {
 }
 
 void handleApiChannels() {
-  const uint32_t now = millis();
-  const uint32_t ageMs = lastFrameMs == 0 ? 999999 : now - lastFrameMs;
-  const bool link = lastFrameMs != 0 && ageMs < 500;
-  const bool armSwitch = channelsUs[CH_ARM] > 1500;
-  const bool armed = link && armSwitch;
-  const uint16_t speedLimit = modeSpeedLimit(channelsUs[CH_MODE]);
-  const int16_t speedCmd = armed ? rcToCommand(channelsUs[CH_PITCH], speedLimit) : 0;
-  const int16_t steerCmd = armed ? rcToCommand(channelsUs[CH_ROLL], speedLimit) : 0;
-  const int16_t leftCmd = constrain(speedCmd + steerCmd, -static_cast<int>(speedLimit), static_cast<int>(speedLimit));
-  const int16_t rightCmd = constrain(speedCmd - steerCmd, -static_cast<int>(speedLimit), static_cast<int>(speedLimit));
-  const uint8_t mode = channelsUs[CH_MODE] < 1300 ? 1 : channelsUs[CH_MODE] < 1700 ? 2 : 3;
-
   String json;
   json.reserve(1100);
   json += "{\"link\":";
-  json += link ? "true" : "false";
+  json += driveMix.link ? "true" : "false";
   json += ",\"age_ms\":";
-  json += ageMs;
+  json += driveMix.ageMs;
   json += ",\"frames\":";
   json += frameCount;
   json += ",\"crc_fail\":";
@@ -309,19 +374,27 @@ void handleApiChannels() {
   json += ",\"bad_frames\":";
   json += badFrameCount;
   json += ",\"control\":{\"armed\":";
-  json += armed ? "true" : "false";
+  json += driveMix.armed ? "true" : "false";
   json += ",\"mode\":";
-  json += mode;
-  json += ",\"limit\":";
-  json += speedLimit;
+  json += driveMix.mode;
+  json += ",\"profile\":\"";
+  json += driveMix.profile->name;
+  json += "\",\"max\":";
+  json += driveMix.profile->maxCommand;
+  json += ",\"accel\":";
+  json += driveMix.profile->accelPerSec;
+  json += ",\"target_speed\":";
+  json += driveMix.targetSpeed;
+  json += ",\"target_steer\":";
+  json += driveMix.targetSteer;
   json += ",\"speed\":";
-  json += speedCmd;
+  json += driveMix.speed;
   json += ",\"steer\":";
-  json += steerCmd;
+  json += driveMix.steer;
   json += ",\"left\":";
-  json += leftCmd;
+  json += driveMix.left;
   json += ",\"right\":";
-  json += rightCmd;
+  json += driveMix.right;
   json += '}';
   json += ",\"channels\":[";
   for (size_t i = 0; i < CRSF_CHANNEL_COUNT; i++) {
@@ -396,5 +469,6 @@ void setup() {
 
 void loop() {
   readCrsf();
+  updateDriveMix();
   server.handleClient();
 }
