@@ -120,7 +120,10 @@ baud 115200
 #define I_DC_MAX        10
 #define N_MOT_MAX       60
 #define DEFAULT_RATE    160
+#define STEER_COEFFICIENT 16384
 ```
+
+`STEER_COEFFICIENT = 1.0` нужен для честного left/right motor test. Иначе hover-прошивка сама ослабляет поворот, и контрвращение не доходит до 100%.
 
 Патч:
 
@@ -156,7 +159,8 @@ firmware/esp32-crsf-web
 - даёт профили `turtle/normal/full`;
 - шлёт hoverboard serial command;
 - читает hoverboard feedback;
-- даёт web debug control без пульта.
+- даёт web debug control без пульта;
+- даёт Motor Test как в Betaflight: левый, правый, оба, направление, 0..100%.
 
 Прошить:
 
@@ -228,6 +232,38 @@ Failsafe:
 если web arm off -> команда 0
 ```
 
+## Сцена 6.5. Motor Test
+
+Нужен для стенда, когда надо крутить моторы отдельно, а не рулить как машинкой.
+
+Веб-блок:
+
+```text
+motor test -> включает режим теста моторов
+test arm   -> разрешает вращение
+direction  -> forward / reverse
+left       -> левый мотор 0..100%
+right      -> правый мотор 0..100%
+both       -> оба мотора 0..100%
+ZERO       -> left=0, right=0, test arm off
+```
+
+Приоритет источников:
+
+```text
+Motor Test > Web Drive > RC
+```
+
+Motor Test взаимоисключается с Web Drive. Включил Motor Test — web-drive гасится. Включил Web Drive — motor-test гасится.
+
+Что значит `100%`:
+
+```text
+100% = EFeru command 1000
+```
+
+Это максимум команды управления. Физический максимум всё ещё режется безопасными лимитами hoverboard-прошивки: `I_MOT_MAX`, `I_DC_MAX`, `N_MOT_MAX`.
+
 ## Сцена 7. Первый живой тест
 
 Порядок:
@@ -243,6 +279,17 @@ Failsafe:
 9. `web arm ON`;
 10. `speed = 5..10`;
 11. нажать `STOP`.
+
+Для Motor Test:
+
+1. колёса в воздухе;
+2. `motor test ON`;
+3. `direction = forward`;
+4. `test arm ON`;
+5. `left = 5`, потом `ZERO`;
+6. `right = 5`, потом `ZERO`;
+7. `both = 5`, потом `ZERO`;
+8. если направления не совпали с ожиданием — фиксируем, потом инвертим в конфиге, а не гадаем проводами под током.
 
 Стоп-триггеры:
 

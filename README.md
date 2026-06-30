@@ -61,6 +61,7 @@ ESP32-стенд:
 - CRSF вход ELRS: `GPIO16/17`;
 - hoverboard UART: `GPIO25/26`;
 - web debug control: можно рулить без пульта;
+- Motor Test: левый/правый/оба мотора, 0..100%, forward/reverse;
 - failsafe web heartbeat: 500 ms.
 
 Патчи с безопасным конфигом:

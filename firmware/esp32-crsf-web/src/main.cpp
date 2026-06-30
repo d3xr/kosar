@@ -19,6 +19,8 @@ static constexpr int VBAT_ADC_PIN = 35;
 static constexpr float VBAT_R_TOP = 390000.0f;
 static constexpr float VBAT_R_BOTTOM = 27000.0f;
 static constexpr uint32_t WEB_DRIVE_TIMEOUT_MS = 500;
+static constexpr uint32_t MOTOR_TEST_TIMEOUT_MS = 500;
+static constexpr int16_t MOTOR_TEST_MAX_COMMAND = 1000;
 
 static constexpr const char *AP_SSID = "Kosar-RC";
 static constexpr const char *AP_PASS = "kosar1234";
@@ -59,10 +61,13 @@ static constexpr DriveProfile DRIVE_PROFILES[] = {
   {"full", 420, 1200, 1200},
 };
 
+static constexpr DriveProfile MOTOR_TEST_PROFILE = {"motor", MOTOR_TEST_MAX_COMMAND, 4000, 4000};
+
 struct DriveMix {
   bool link = false;
   bool armed = false;
   bool webActive = false;
+  bool motorTestActive = false;
   uint32_t ageMs = 999999;
   uint8_t mode = 1;
   const DriveProfile *profile = &DRIVE_PROFILES[0];
@@ -81,6 +86,15 @@ struct WebDriveState {
   uint8_t mode = 1;
   int16_t speed = 0;
   int16_t steer = 0;
+  uint32_t lastUpdateMs = 0;
+};
+
+struct MotorTestState {
+  bool enabled = false;
+  bool armed = false;
+  bool reverse = false;
+  int16_t left = 0;
+  int16_t right = 0;
   uint32_t lastUpdateMs = 0;
 };
 
@@ -108,6 +122,7 @@ HardwareSerial hoverSerial(2);
 WebServer server(80);
 DriveMix driveMix;
 WebDriveState webDrive;
+MotorTestState motorTest;
 
 uint16_t channelsRaw[CRSF_CHANNEL_COUNT] = {};
 uint16_t channelsUs[CRSF_CHANNEL_COUNT] = {};
@@ -159,10 +174,10 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
 .feedback{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
-.webdrive{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
-.webdrive label{display:grid;gap:6px;color:var(--muted);font-size:12px}.webdrive input[type=range]{width:100%}.webdrive input[type=checkbox]{width:22px;height:22px;accent-color:var(--hot)}
-.webdrive select,.webdrive button{border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:9px;font:inherit}
-.webdrive button{cursor:pointer}.webdrive button:active{transform:translateY(1px)}
+.webdrive,.motortest{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
+.webdrive label,.motortest label{display:grid;gap:6px;color:var(--muted);font-size:12px}.webdrive input[type=range],.motortest input[type=range]{width:100%}.webdrive input[type=checkbox],.motortest input[type=checkbox]{width:22px;height:22px;accent-color:var(--hot)}
+.webdrive select,.webdrive button,.motortest select,.motortest button{border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:9px;font:inherit}
+.webdrive button,.motortest button{cursor:pointer}.webdrive button:active,.motortest button:active{transform:translateY(1px)}
 .metric{border:1px solid var(--line);border-radius:7px;padding:8px;background:#111512}.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.metric span{color:var(--muted);font-size:12px}
 .ch{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px;display:grid;grid-template-columns:64px minmax(90px,160px) 1fr 72px;gap:10px;align-items:center;min-height:54px}
 .idx{color:var(--muted);font-weight:700}.label{width:100%;border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:8px;font:inherit}
@@ -170,8 +185,8 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 .value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}.dead .fill{background:var(--bad)}.dead #link{color:var(--bad)}
 @media (max-width:920px){.control{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:920px){.feedback{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:920px){.webdrive{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}.control,.feedback,.webdrive{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:920px){.webdrive,.motortest{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}.control,.feedback,.webdrive,.motortest{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -216,6 +231,16 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
   <div class="metric"><b id="source">rc</b><span>source</span></div>
   <div class="metric"><b id="webAge">---</b><span>web age ms</span></div>
 </section>
+<section class="motortest">
+  <label>motor test<input id="motorEnabled" type="checkbox"></label>
+  <label>test arm<input id="motorArm" type="checkbox"></label>
+  <label>direction<select id="motorDirection"><option value="0">forward</option><option value="1">reverse</option></select></label>
+  <button id="motorStop" type="button">ZERO</button>
+  <label>left <b id="motorLeftVal">0</b><input id="motorLeft" type="range" min="0" max="100" value="0"></label>
+  <label>right <b id="motorRightVal">0</b><input id="motorRight" type="range" min="0" max="100" value="0"></label>
+  <label>both <b id="motorBothVal">0</b><input id="motorBoth" type="range" min="0" max="100" value="0"></label>
+  <div class="metric"><b id="motorAge">---</b><span>motor age ms</span></div>
+</section>
 <section class="grid" id="channels"></section>
 </main>
 <script>
@@ -227,7 +252,17 @@ const webSpeed=document.getElementById('webSpeed');
 const webSteer=document.getElementById('webSteer');
 const webSpeedVal=document.getElementById('webSpeedVal');
 const webSteerVal=document.getElementById('webSteerVal');
+const motorEnabled=document.getElementById('motorEnabled');
+const motorArm=document.getElementById('motorArm');
+const motorDirection=document.getElementById('motorDirection');
+const motorLeft=document.getElementById('motorLeft');
+const motorRight=document.getElementById('motorRight');
+const motorBoth=document.getElementById('motorBoth');
+const motorLeftVal=document.getElementById('motorLeftVal');
+const motorRightVal=document.getElementById('motorRightVal');
+const motorBothVal=document.getElementById('motorBothVal');
 let lastWebSend=0;
+let lastMotorSend=0;
 const names=["Roll","Pitch","Throttle","Yaw","Arm","Mode","Aux 3","Aux 4","Aux 5","Aux 6","Aux 7","Aux 8","Aux 9","Aux 10","Aux 11","Aux 12"];
 for(let i=0;i<16;i++){
   const saved=localStorage.getItem('kosar.ch'+i)||names[i]||('CH '+(i+1));
@@ -238,6 +273,16 @@ for(let i=0;i<16;i++){
   root.appendChild(row);
 }
 function stopWebDrive(){
+  webEnabled.checked=false;
+  webArm.checked=false;
+  webSpeed.value=0;
+  webSteer.value=0;
+  webSpeedVal.textContent='0';
+  webSteerVal.textContent='0';
+  sendWebDrive(true);
+}
+function disableWebDrive(){
+  webEnabled.checked=false;
   webArm.checked=false;
   webSpeed.value=0;
   webSteer.value=0;
@@ -260,9 +305,56 @@ async function sendWebDrive(force=false){
   });
   try{await fetch('/api/webdrive?'+params.toString(),{cache:'no-store'});}catch(e){}
 }
+function zeroMotorTest(){
+  motorArm.checked=false;
+  motorLeft.value=0;
+  motorRight.value=0;
+  motorBoth.value=0;
+  motorLeftVal.textContent='0';
+  motorRightVal.textContent='0';
+  motorBothVal.textContent='0';
+  sendMotorTest(true);
+}
+function disableMotorTest(){
+  motorEnabled.checked=false;
+  motorArm.checked=false;
+  motorLeft.value=0;
+  motorRight.value=0;
+  motorBoth.value=0;
+  motorLeftVal.textContent='0';
+  motorRightVal.textContent='0';
+  motorBothVal.textContent='0';
+  sendMotorTest(true);
+}
+async function sendMotorTest(force=false){
+  const now=Date.now();
+  if(!force && now-lastMotorSend<80)return;
+  lastMotorSend=now;
+  motorLeftVal.textContent=motorLeft.value;
+  motorRightVal.textContent=motorRight.value;
+  motorBothVal.textContent=motorBoth.value;
+  const params=new URLSearchParams({
+    enabled:motorEnabled.checked?'1':'0',
+    armed:motorArm.checked?'1':'0',
+    reverse:motorDirection.value,
+    left:motorLeft.value,
+    right:motorRight.value
+  });
+  try{await fetch('/api/motortest?'+params.toString(),{cache:'no-store'});}catch(e){}
+}
 document.getElementById('webStop').addEventListener('click',stopWebDrive);
-[webEnabled,webArm,webMode,webSpeed,webSteer].forEach(el=>el.addEventListener('input',()=>sendWebDrive(true)));
+document.getElementById('motorStop').addEventListener('click',zeroMotorTest);
+webEnabled.addEventListener('input',()=>{if(webEnabled.checked)disableMotorTest();sendWebDrive(true)});
+[webArm,webMode,webSpeed,webSteer].forEach(el=>el.addEventListener('input',()=>sendWebDrive(true)));
+motorBoth.addEventListener('input',()=>{
+  motorLeft.value=motorBoth.value;
+  motorRight.value=motorBoth.value;
+  sendMotorTest(true);
+});
+motorEnabled.addEventListener('input',()=>{if(motorEnabled.checked)disableWebDrive();sendMotorTest(true)});
+[motorArm,motorDirection,motorLeft,motorRight].forEach(el=>el.addEventListener('input',()=>sendMotorTest(true)));
 setInterval(()=>{if(webEnabled.checked)sendWebDrive(false)},100);
+setInterval(()=>{if(motorEnabled.checked)sendMotorTest(false)},100);
 async function tick(){
   try{
     const r=await fetch('/api/channels',{cache:'no-store'});
@@ -275,6 +367,7 @@ async function tick(){
     document.getElementById('armed').textContent=d.control.armed?'YES':'NO';
     document.getElementById('source').textContent=d.control.source;
     document.getElementById('webAge').textContent=d.web_drive.age_ms;
+    document.getElementById('motorAge').textContent=d.motor_test.age_ms;
     document.getElementById('profile').textContent=d.control.profile;
     document.getElementById('accel').textContent=d.control.accel;
     document.getElementById('speed').textContent=d.control.speed;
@@ -363,6 +456,12 @@ int16_t webPercentToCommand(int value, int16_t limit) {
   return static_cast<int16_t>((percent * limit) / 100);
 }
 
+int16_t motorPercentToCommand(int value, bool reverse) {
+  const int percent = constrain(value, 0, 100);
+  const int sign = reverse ? -1 : 1;
+  return static_cast<int16_t>((percent * MOTOR_TEST_MAX_COMMAND * sign) / 100);
+}
+
 int16_t stepToward(int16_t current, int16_t target, int16_t ratePerSec, uint32_t dtMs) {
   const int32_t delta = static_cast<int32_t>(target) - current;
   const int32_t maxStep = max<int32_t>(1, (static_cast<int32_t>(ratePerSec) * dtMs) / 1000);
@@ -384,8 +483,13 @@ void updateDriveMix() {
   driveMix.link = lastFrameMs != 0 && driveMix.ageMs < 500;
   driveMix.webActive = webDrive.enabled && webDrive.lastUpdateMs != 0 &&
                        now - webDrive.lastUpdateMs < WEB_DRIVE_TIMEOUT_MS;
+  driveMix.motorTestActive = motorTest.enabled && motorTest.lastUpdateMs != 0 &&
+                             now - motorTest.lastUpdateMs < MOTOR_TEST_TIMEOUT_MS;
 
-  if (driveMix.webActive) {
+  if (driveMix.motorTestActive) {
+    driveMix.armed = motorTest.armed;
+    driveMix.mode = 3;
+  } else if (driveMix.webActive) {
     driveMix.armed = webDrive.armed;
     driveMix.mode = webDrive.mode;
   } else {
@@ -393,11 +497,16 @@ void updateDriveMix() {
     driveMix.mode = modeFromUs(channelsUs[CH_MODE]);
   }
 
-  driveMix.profile = &DRIVE_PROFILES[driveMix.mode - 1];
+  driveMix.profile = driveMix.motorTestActive ? &MOTOR_TEST_PROFILE : &DRIVE_PROFILES[driveMix.mode - 1];
 
   if (!driveMix.armed) {
     driveMix.targetSpeed = 0;
     driveMix.targetSteer = 0;
+  } else if (driveMix.motorTestActive) {
+    const int16_t leftTarget = motorPercentToCommand(motorTest.left, motorTest.reverse);
+    const int16_t rightTarget = motorPercentToCommand(motorTest.right, motorTest.reverse);
+    driveMix.targetSpeed = static_cast<int16_t>((static_cast<int32_t>(leftTarget) + rightTarget) / 2);
+    driveMix.targetSteer = static_cast<int16_t>((static_cast<int32_t>(leftTarget) - rightTarget) / 2);
   } else if (driveMix.webActive) {
     driveMix.targetSpeed = webPercentToCommand(webDrive.speed, driveMix.profile->maxCommand);
     driveMix.targetSteer = webPercentToCommand(webDrive.steer, driveMix.profile->maxCommand);
@@ -534,9 +643,46 @@ void handleWebDrive() {
     webDrive.armed = false;
     webDrive.speed = 0;
     webDrive.steer = 0;
+  } else {
+    motorTest.enabled = false;
+    motorTest.armed = false;
+    motorTest.left = 0;
+    motorTest.right = 0;
   }
 
   webDrive.lastUpdateMs = millis();
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+void handleMotorTest() {
+  if (server.hasArg("enabled")) {
+    motorTest.enabled = server.arg("enabled") == "1";
+  }
+  if (server.hasArg("armed")) {
+    motorTest.armed = server.arg("armed") == "1";
+  }
+  if (server.hasArg("reverse")) {
+    motorTest.reverse = server.arg("reverse") == "1";
+  }
+  if (server.hasArg("left")) {
+    motorTest.left = constrain(server.arg("left").toInt(), 0, 100);
+  }
+  if (server.hasArg("right")) {
+    motorTest.right = constrain(server.arg("right").toInt(), 0, 100);
+  }
+
+  if (!motorTest.enabled) {
+    motorTest.armed = false;
+    motorTest.left = 0;
+    motorTest.right = 0;
+  } else {
+    webDrive.enabled = false;
+    webDrive.armed = false;
+    webDrive.speed = 0;
+    webDrive.steer = 0;
+  }
+
+  motorTest.lastUpdateMs = millis();
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -615,9 +761,10 @@ void handleApiChannels() {
   const uint32_t hoverAgeMs = lastHoverFeedbackMs == 0 ? 999999 : millis() - lastHoverFeedbackMs;
   const bool hoverLink = lastHoverFeedbackMs != 0 && hoverAgeMs < 500;
   const uint32_t webAgeMs = webDrive.lastUpdateMs == 0 ? 999999 : millis() - webDrive.lastUpdateMs;
+  const uint32_t motorAgeMs = motorTest.lastUpdateMs == 0 ? 999999 : millis() - motorTest.lastUpdateMs;
 
   String json;
-  json.reserve(1600);
+  json.reserve(2100);
   json += "{\"link\":";
   json += driveMix.link ? "true" : "false";
   json += ",\"age_ms\":";
@@ -645,6 +792,21 @@ void handleApiChannels() {
   json += ",\"mode\":";
   json += webDrive.mode;
   json += '}';
+  json += ",\"motor_test\":{\"enabled\":";
+  json += motorTest.enabled ? "true" : "false";
+  json += ",\"armed\":";
+  json += motorTest.armed ? "true" : "false";
+  json += ",\"active\":";
+  json += driveMix.motorTestActive ? "true" : "false";
+  json += ",\"reverse\":";
+  json += motorTest.reverse ? "true" : "false";
+  json += ",\"age_ms\":";
+  json += motorAgeMs;
+  json += ",\"left\":";
+  json += motorTest.left;
+  json += ",\"right\":";
+  json += motorTest.right;
+  json += '}';
   json += ",\"hover\":{\"link\":";
   json += hoverLink ? "true" : "false";
   json += ",\"age_ms\":";
@@ -671,7 +833,7 @@ void handleApiChannels() {
   json += ",\"control\":{\"armed\":";
   json += driveMix.armed ? "true" : "false";
   json += ",\"source\":\"";
-  json += driveMix.webActive ? "web" : "rc";
+  json += driveMix.motorTestActive ? "motor" : (driveMix.webActive ? "web" : "rc");
   json += "\"";
   json += ",\"mode\":";
   json += driveMix.mode;
@@ -760,6 +922,7 @@ void setup() {
   server.on("/", HTTP_GET, handleIndex);
   server.on("/api/channels", HTTP_GET, handleApiChannels);
   server.on("/api/webdrive", HTTP_GET, handleWebDrive);
+  server.on("/api/motortest", HTTP_GET, handleMotorTest);
   server.begin();
 
   if (MDNS.begin("kosar")) {
