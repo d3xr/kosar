@@ -18,6 +18,7 @@ static constexpr uint32_t HOVER_SEND_INTERVAL_MS = 20;
 static constexpr int VBAT_ADC_PIN = 35;
 static constexpr float VBAT_R_TOP = 390000.0f;
 static constexpr float VBAT_R_BOTTOM = 27000.0f;
+static constexpr uint32_t WEB_DRIVE_TIMEOUT_MS = 500;
 
 static constexpr const char *AP_SSID = "Kosar-RC";
 static constexpr const char *AP_PASS = "kosar1234";
@@ -61,6 +62,7 @@ static constexpr DriveProfile DRIVE_PROFILES[] = {
 struct DriveMix {
   bool link = false;
   bool armed = false;
+  bool webActive = false;
   uint32_t ageMs = 999999;
   uint8_t mode = 1;
   const DriveProfile *profile = &DRIVE_PROFILES[0];
@@ -70,6 +72,15 @@ struct DriveMix {
   int16_t steer = 0;
   int16_t left = 0;
   int16_t right = 0;
+  uint32_t lastUpdateMs = 0;
+};
+
+struct WebDriveState {
+  bool enabled = false;
+  bool armed = false;
+  uint8_t mode = 1;
+  int16_t speed = 0;
+  int16_t steer = 0;
   uint32_t lastUpdateMs = 0;
 };
 
@@ -96,6 +107,7 @@ HardwareSerial crsfSerial(1);
 HardwareSerial hoverSerial(2);
 WebServer server(80);
 DriveMix driveMix;
+WebDriveState webDrive;
 
 uint16_t channelsRaw[CRSF_CHANNEL_COUNT] = {};
 uint16_t channelsUs[CRSF_CHANNEL_COUNT] = {};
@@ -147,6 +159,10 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
 .feedback{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.webdrive{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
+.webdrive label{display:grid;gap:6px;color:var(--muted);font-size:12px}.webdrive input[type=range]{width:100%}.webdrive input[type=checkbox]{width:22px;height:22px;accent-color:var(--hot)}
+.webdrive select,.webdrive button{border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:9px;font:inherit}
+.webdrive button{cursor:pointer}.webdrive button:active{transform:translateY(1px)}
 .metric{border:1px solid var(--line);border-radius:7px;padding:8px;background:#111512}.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.metric span{color:var(--muted);font-size:12px}
 .ch{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px;display:grid;grid-template-columns:64px minmax(90px,160px) 1fr 72px;gap:10px;align-items:center;min-height:54px}
 .idx{color:var(--muted);font-weight:700}.label{width:100%;border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:8px;font:inherit}
@@ -154,7 +170,8 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 .value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}.dead .fill{background:var(--bad)}.dead #link{color:var(--bad)}
 @media (max-width:920px){.control{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:920px){.feedback{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}.control,.feedback{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:920px){.webdrive{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}.control,.feedback,.webdrive{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -189,10 +206,28 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
   <div class="metric"><b id="htemp">0</b><span>board temp</span></div>
   <div class="metric"><b id="hcrc">0</b><span>hover crc fail</span></div>
 </section>
+<section class="webdrive">
+  <label>web drive<input id="webEnabled" type="checkbox"></label>
+  <label>web arm<input id="webArm" type="checkbox"></label>
+  <label>profile<select id="webMode"><option value="1">turtle</option><option value="2">normal</option><option value="3">full</option></select></label>
+  <button id="webStop" type="button">STOP</button>
+  <label>speed <b id="webSpeedVal">0</b><input id="webSpeed" type="range" min="-100" max="100" value="0"></label>
+  <label>steer <b id="webSteerVal">0</b><input id="webSteer" type="range" min="-100" max="100" value="0"></label>
+  <div class="metric"><b id="source">rc</b><span>source</span></div>
+  <div class="metric"><b id="webAge">---</b><span>web age ms</span></div>
+</section>
 <section class="grid" id="channels"></section>
 </main>
 <script>
 const root=document.getElementById('channels');
+const webEnabled=document.getElementById('webEnabled');
+const webArm=document.getElementById('webArm');
+const webMode=document.getElementById('webMode');
+const webSpeed=document.getElementById('webSpeed');
+const webSteer=document.getElementById('webSteer');
+const webSpeedVal=document.getElementById('webSpeedVal');
+const webSteerVal=document.getElementById('webSteerVal');
+let lastWebSend=0;
 const names=["Roll","Pitch","Throttle","Yaw","Arm","Mode","Aux 3","Aux 4","Aux 5","Aux 6","Aux 7","Aux 8","Aux 9","Aux 10","Aux 11","Aux 12"];
 for(let i=0;i<16;i++){
   const saved=localStorage.getItem('kosar.ch'+i)||names[i]||('CH '+(i+1));
@@ -202,6 +237,32 @@ for(let i=0;i<16;i++){
   row.querySelector('input').addEventListener('input',e=>localStorage.setItem('kosar.ch'+i,e.target.value));
   root.appendChild(row);
 }
+function stopWebDrive(){
+  webArm.checked=false;
+  webSpeed.value=0;
+  webSteer.value=0;
+  webSpeedVal.textContent='0';
+  webSteerVal.textContent='0';
+  sendWebDrive(true);
+}
+async function sendWebDrive(force=false){
+  const now=Date.now();
+  if(!force && now-lastWebSend<80)return;
+  lastWebSend=now;
+  webSpeedVal.textContent=webSpeed.value;
+  webSteerVal.textContent=webSteer.value;
+  const params=new URLSearchParams({
+    enabled:webEnabled.checked?'1':'0',
+    armed:webArm.checked?'1':'0',
+    mode:webMode.value,
+    speed:webSpeed.value,
+    steer:webSteer.value
+  });
+  try{await fetch('/api/webdrive?'+params.toString(),{cache:'no-store'});}catch(e){}
+}
+document.getElementById('webStop').addEventListener('click',stopWebDrive);
+[webEnabled,webArm,webMode,webSpeed,webSteer].forEach(el=>el.addEventListener('input',()=>sendWebDrive(true)));
+setInterval(()=>{if(webEnabled.checked)sendWebDrive(false)},100);
 async function tick(){
   try{
     const r=await fetch('/api/channels',{cache:'no-store'});
@@ -212,6 +273,8 @@ async function tick(){
     document.getElementById('frames').textContent=d.frames;
     document.getElementById('crc').textContent=d.crc_fail;
     document.getElementById('armed').textContent=d.control.armed?'YES':'NO';
+    document.getElementById('source').textContent=d.control.source;
+    document.getElementById('webAge').textContent=d.web_drive.age_ms;
     document.getElementById('profile').textContent=d.control.profile;
     document.getElementById('accel').textContent=d.control.accel;
     document.getElementById('speed').textContent=d.control.speed;
@@ -285,6 +348,21 @@ uint8_t modeFromUs(uint16_t modeUs) {
   return 3;
 }
 
+uint8_t clampMode(int value) {
+  if (value < 1) {
+    return 1;
+  }
+  if (value > 3) {
+    return 3;
+  }
+  return static_cast<uint8_t>(value);
+}
+
+int16_t webPercentToCommand(int value, int16_t limit) {
+  const int percent = constrain(value, -100, 100);
+  return static_cast<int16_t>((percent * limit) / 100);
+}
+
 int16_t stepToward(int16_t current, int16_t target, int16_t ratePerSec, uint32_t dtMs) {
   const int32_t delta = static_cast<int32_t>(target) - current;
   const int32_t maxStep = max<int32_t>(1, (static_cast<int32_t>(ratePerSec) * dtMs) / 1000);
@@ -304,12 +382,29 @@ void updateDriveMix() {
 
   driveMix.ageMs = lastFrameMs == 0 ? 999999 : now - lastFrameMs;
   driveMix.link = lastFrameMs != 0 && driveMix.ageMs < 500;
-  driveMix.armed = driveMix.link && channelsUs[CH_ARM] > 1500;
-  driveMix.mode = modeFromUs(channelsUs[CH_MODE]);
+  driveMix.webActive = webDrive.enabled && webDrive.lastUpdateMs != 0 &&
+                       now - webDrive.lastUpdateMs < WEB_DRIVE_TIMEOUT_MS;
+
+  if (driveMix.webActive) {
+    driveMix.armed = webDrive.armed;
+    driveMix.mode = webDrive.mode;
+  } else {
+    driveMix.armed = driveMix.link && channelsUs[CH_ARM] > 1500;
+    driveMix.mode = modeFromUs(channelsUs[CH_MODE]);
+  }
+
   driveMix.profile = &DRIVE_PROFILES[driveMix.mode - 1];
 
-  driveMix.targetSpeed = driveMix.armed ? rcToCommand(channelsUs[CH_PITCH], driveMix.profile->maxCommand) : 0;
-  driveMix.targetSteer = driveMix.armed ? rcToCommand(channelsUs[CH_ROLL], driveMix.profile->maxCommand) : 0;
+  if (!driveMix.armed) {
+    driveMix.targetSpeed = 0;
+    driveMix.targetSteer = 0;
+  } else if (driveMix.webActive) {
+    driveMix.targetSpeed = webPercentToCommand(webDrive.speed, driveMix.profile->maxCommand);
+    driveMix.targetSteer = webPercentToCommand(webDrive.steer, driveMix.profile->maxCommand);
+  } else {
+    driveMix.targetSpeed = rcToCommand(channelsUs[CH_PITCH], driveMix.profile->maxCommand);
+    driveMix.targetSteer = rcToCommand(channelsUs[CH_ROLL], driveMix.profile->maxCommand);
+  }
 
   if (!driveMix.armed) {
     driveMix.speed = 0;
@@ -418,6 +513,33 @@ void handleIndex() {
   server.send_P(200, "text/html", INDEX_HTML);
 }
 
+void handleWebDrive() {
+  if (server.hasArg("enabled")) {
+    webDrive.enabled = server.arg("enabled") == "1";
+  }
+  if (server.hasArg("armed")) {
+    webDrive.armed = server.arg("armed") == "1";
+  }
+  if (server.hasArg("mode")) {
+    webDrive.mode = clampMode(server.arg("mode").toInt());
+  }
+  if (server.hasArg("speed")) {
+    webDrive.speed = constrain(server.arg("speed").toInt(), -100, 100);
+  }
+  if (server.hasArg("steer")) {
+    webDrive.steer = constrain(server.arg("steer").toInt(), -100, 100);
+  }
+
+  if (!webDrive.enabled) {
+    webDrive.armed = false;
+    webDrive.speed = 0;
+    webDrive.steer = 0;
+  }
+
+  webDrive.lastUpdateMs = millis();
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
 void sendHoverCommand() {
   const uint32_t now = millis();
   if (now - lastHoverSendMs < HOVER_SEND_INTERVAL_MS) {
@@ -492,9 +614,10 @@ void updateBatteryVoltage() {
 void handleApiChannels() {
   const uint32_t hoverAgeMs = lastHoverFeedbackMs == 0 ? 999999 : millis() - lastHoverFeedbackMs;
   const bool hoverLink = lastHoverFeedbackMs != 0 && hoverAgeMs < 500;
+  const uint32_t webAgeMs = webDrive.lastUpdateMs == 0 ? 999999 : millis() - webDrive.lastUpdateMs;
 
   String json;
-  json.reserve(1400);
+  json.reserve(1600);
   json += "{\"link\":";
   json += driveMix.link ? "true" : "false";
   json += ",\"age_ms\":";
@@ -507,6 +630,21 @@ void handleApiChannels() {
   json += badFrameCount;
   json += ",\"battery_v\":";
   json += String(batteryVoltage, 2);
+  json += ",\"web_drive\":{\"enabled\":";
+  json += webDrive.enabled ? "true" : "false";
+  json += ",\"armed\":";
+  json += webDrive.armed ? "true" : "false";
+  json += ",\"active\":";
+  json += driveMix.webActive ? "true" : "false";
+  json += ",\"age_ms\":";
+  json += webAgeMs;
+  json += ",\"speed\":";
+  json += webDrive.speed;
+  json += ",\"steer\":";
+  json += webDrive.steer;
+  json += ",\"mode\":";
+  json += webDrive.mode;
+  json += '}';
   json += ",\"hover\":{\"link\":";
   json += hoverLink ? "true" : "false";
   json += ",\"age_ms\":";
@@ -532,6 +670,9 @@ void handleApiChannels() {
   json += '}';
   json += ",\"control\":{\"armed\":";
   json += driveMix.armed ? "true" : "false";
+  json += ",\"source\":\"";
+  json += driveMix.webActive ? "web" : "rc";
+  json += "\"";
   json += ",\"mode\":";
   json += driveMix.mode;
   json += ",\"profile\":\"";
@@ -618,6 +759,7 @@ void setup() {
 
   server.on("/", HTTP_GET, handleIndex);
   server.on("/api/channels", HTTP_GET, handleApiChannels);
+  server.on("/api/webdrive", HTTP_GET, handleWebDrive);
   server.begin();
 
   if (MDNS.begin("kosar")) {
