@@ -56,9 +56,9 @@ struct DriveProfile {
 };
 
 static constexpr DriveProfile DRIVE_PROFILES[] = {
-  {"turtle", 100, 120, 180},
-  {"normal", 240, 420, 520},
-  {"full", 420, 1200, 1200},
+  {"low", 250, 250, 250},
+  {"mid", 600, 800, 800},
+  {"max", 1000, 2500, 2500},
 };
 
 static constexpr DriveProfile MOTOR_TEST_PROFILE = {"motor", MOTOR_TEST_MAX_COMMAND, 4000, 4000};
@@ -205,7 +205,7 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 </header>
 <section class="control">
   <div class="metric"><b id="armed">NO</b><span>armed</span></div>
-  <div class="metric"><b id="profile">turtle</b><span>profile</span></div>
+  <div class="metric"><b id="profile">low</b><span>profile</span></div>
   <div class="metric"><b id="accel">0</b><span>accel/s</span></div>
   <div class="metric"><b id="speed">0</b><span>speed cmd</span></div>
   <div class="metric"><b id="steer">0</b><span>steer cmd</span></div>
@@ -224,7 +224,7 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 <section class="webdrive">
   <label>web drive<input id="webEnabled" type="checkbox"></label>
   <label>web arm<input id="webArm" type="checkbox"></label>
-  <label>profile<select id="webMode"><option value="1">turtle</option><option value="2">normal</option><option value="3">full</option></select></label>
+  <label>profile<select id="webMode"><option value="1">low</option><option value="2">mid</option><option value="3">max</option></select></label>
   <button id="webStop" type="button">STOP</button>
   <label>speed <b id="webSpeedVal">0</b><input id="webSpeed" type="range" min="-100" max="100" value="0"></label>
   <label>steer <b id="webSteerVal">0</b><input id="webSteer" type="range" min="-100" max="100" value="0"></label>

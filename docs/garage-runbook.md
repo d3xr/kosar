@@ -118,12 +118,14 @@ baud 115200
 ```c
 #define I_MOT_MAX       8
 #define I_DC_MAX        10
-#define N_MOT_MAX       60
+#define N_MOT_MAX       1000
 #define DEFAULT_RATE    160
 #define STEER_COEFFICIENT 16384
 ```
 
 `STEER_COEFFICIENT = 1.0` нужен для честного left/right motor test. Иначе hover-прошивка сама ослабляет поворот, и контрвращение не доходит до 100%.
+
+`N_MOT_MAX` оставлен дефолтным `1000 rpm`: скорость не душим в hoverboard-прошивке. Ограничение режима делается на ESP через команду `-1000..1000`.
 
 Патч:
 
@@ -156,7 +158,7 @@ firmware/esp32-crsf-web
 - хранит подписи каналов в browser `localStorage`;
 - считает `speed/steer`;
 - режет управление через `Arm`;
-- даёт профили `turtle/normal/full`;
+- даёт профили `low/mid/max`;
 - шлёт hoverboard serial command;
 - читает hoverboard feedback;
 - даёт web debug control без пульта;
@@ -186,15 +188,15 @@ url: http://192.168.4.1/
 CH1 Roll  -> steer
 CH2 Pitch -> speed
 CH5 Arm   -> gate движения
-CH6 Mode  -> профиль отклика
+CH6 Mode  -> low / mid / max
 ```
 
 Профили:
 
 ```text
-turtle: max 100, accel 120/s, steer 180/s
-normal: max 240, accel 420/s, steer 520/s
-full:   max 420, accel 1200/s, steer 1200/s
+1000us: low  max 250,  accel 250/s,  steer 250/s
+1500us: mid  max 600,  accel 800/s,  steer 800/s
+2000us: max  max 1000, accel 2500/s, steer 2500/s
 ```
 
 `Throttle` не используем как газ: он не самоцентрируется.
@@ -217,7 +219,7 @@ checksum = start ^ steer ^ speed
 ```text
 web drive  -> включает web-source
 web arm    -> разрешает движение
-profile    -> turtle / normal / full
+profile    -> low / mid / max
 speed      -> вперёд/назад
 steer      -> поворот
 STOP       -> speed=0, steer=0, web arm off
@@ -262,7 +264,7 @@ Motor Test взаимоисключается с Web Drive. Включил Motor
 100% = EFeru command 1000
 ```
 
-Это максимум команды управления. Физический максимум всё ещё режется безопасными лимитами hoverboard-прошивки: `I_MOT_MAX`, `I_DC_MAX`, `N_MOT_MAX`.
+Это максимум команды управления. Физический максимум дальше упирается в батарею, моторы, FOC и токовые лимиты `I_MOT_MAX` / `I_DC_MAX`.
 
 ## Сцена 7. Первый живой тест
 
@@ -274,7 +276,7 @@ Motor Test взаимоисключается с Web Drive. Включил Motor
 4. общий GND между ESP и hoverboard;
 5. открыть `http://kosar.local/`;
 6. проверить `hoverboard OK`;
-7. `profile = turtle`;
+7. `profile = low`;
 8. `web drive ON`;
 9. `web arm ON`;
 10. `speed = 5..10`;
