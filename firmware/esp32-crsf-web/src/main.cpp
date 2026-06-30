@@ -10,6 +10,11 @@
 static constexpr int CRSF_RX_PIN = 16;
 static constexpr int CRSF_TX_PIN = 17;
 static constexpr uint32_t CRSF_BAUD = 420000;
+static constexpr int HOVER_RX_PIN = 26;
+static constexpr int HOVER_TX_PIN = 25;
+static constexpr uint32_t HOVER_BAUD = 115200;
+static constexpr uint16_t HOVER_START_FRAME = 0xABCD;
+static constexpr uint32_t HOVER_SEND_INTERVAL_MS = 20;
 static constexpr int VBAT_ADC_PIN = 35;
 static constexpr float VBAT_R_TOP = 390000.0f;
 static constexpr float VBAT_R_BOTTOM = 27000.0f;
@@ -68,7 +73,27 @@ struct DriveMix {
   uint32_t lastUpdateMs = 0;
 };
 
+struct __attribute__((packed)) HoverCommand {
+  uint16_t start;
+  int16_t steer;
+  int16_t speed;
+  uint16_t checksum;
+};
+
+struct __attribute__((packed)) HoverFeedback {
+  uint16_t start;
+  int16_t cmd1;
+  int16_t cmd2;
+  int16_t speedR;
+  int16_t speedL;
+  int16_t batVoltage;
+  int16_t boardTemp;
+  uint16_t cmdLed;
+  uint16_t checksum;
+};
+
 HardwareSerial crsfSerial(1);
+HardwareSerial hoverSerial(2);
 WebServer server(80);
 DriveMix driveMix;
 
@@ -80,6 +105,16 @@ uint32_t crcFailCount = 0;
 uint32_t badFrameCount = 0;
 float batteryVoltage = 0.0f;
 uint32_t lastBatterySampleMs = 0;
+uint32_t lastHoverSendMs = 0;
+uint32_t hoverTxCount = 0;
+uint32_t hoverRxCount = 0;
+uint32_t hoverCrcFailCount = 0;
+uint32_t lastHoverFeedbackMs = 0;
+HoverFeedback hoverFeedback = {};
+HoverFeedback hoverFeedbackIn = {};
+uint8_t hoverFeedbackIndex = 0;
+uint8_t *hoverFeedbackPtr = nullptr;
+uint8_t hoverBytePrev = 0;
 
 enum class ParserState {
   WaitAddress,
@@ -111,13 +146,15 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
 .pill b{display:block;font-size:17px}.pill span{color:var(--muted);font-size:12px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
+.feedback{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
 .metric{border:1px solid var(--line);border-radius:7px;padding:8px;background:#111512}.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.metric span{color:var(--muted);font-size:12px}
 .ch{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px;display:grid;grid-template-columns:64px minmax(90px,160px) 1fr 72px;gap:10px;align-items:center;min-height:54px}
 .idx{color:var(--muted);font-weight:700}.label{width:100%;border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:8px;font:inherit}
 .bar{height:16px;border-radius:5px;background:#0a0c0b;border:1px solid #283029;overflow:hidden}.fill{height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--hot));transition:width .08s linear}
 .value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}.dead .fill{background:var(--bad)}.dead #link{color:var(--bad)}
 @media (max-width:920px){.control{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}.control{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:920px){.feedback{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}.control,.feedback{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -143,6 +180,14 @@ h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
   <div class="metric"><b id="left">0</b><span>left motor</span></div>
   <div class="metric"><b id="right">0</b><span>right motor</span></div>
   <div class="metric"><b id="battery">--.-</b><span>battery V</span></div>
+</section>
+<section class="feedback">
+  <div class="metric"><b id="hover">NO</b><span>hoverboard</span></div>
+  <div class="metric"><b id="hcmd">0 / 0</b><span>cmd steer/speed</span></div>
+  <div class="metric"><b id="hspeed">0 / 0</b><span>rpm R/L</span></div>
+  <div class="metric"><b id="hbat">0</b><span>board bat</span></div>
+  <div class="metric"><b id="htemp">0</b><span>board temp</span></div>
+  <div class="metric"><b id="hcrc">0</b><span>hover crc fail</span></div>
 </section>
 <section class="grid" id="channels"></section>
 </main>
@@ -174,6 +219,12 @@ async function tick(){
     document.getElementById('left').textContent=d.control.left;
     document.getElementById('right').textContent=d.control.right;
     document.getElementById('battery').textContent=d.battery_v.toFixed(1);
+    document.getElementById('hover').textContent=d.hover.link?'OK':'NO';
+    document.getElementById('hcmd').textContent=d.hover.cmd1+' / '+d.hover.cmd2;
+    document.getElementById('hspeed').textContent=d.hover.speed_r+' / '+d.hover.speed_l;
+    document.getElementById('hbat').textContent=d.hover.bat;
+    document.getElementById('htemp').textContent=d.hover.temp;
+    document.getElementById('hcrc').textContent=d.hover.crc_fail;
     d.channels.forEach((ch,i)=>{
       const row=root.children[i];
       const pct=Math.max(0,Math.min(100,(ch.us-988)/(2012-988)*100));
@@ -367,6 +418,60 @@ void handleIndex() {
   server.send_P(200, "text/html", INDEX_HTML);
 }
 
+void sendHoverCommand() {
+  const uint32_t now = millis();
+  if (now - lastHoverSendMs < HOVER_SEND_INTERVAL_MS) {
+    return;
+  }
+  lastHoverSendMs = now;
+
+  HoverCommand command = {};
+  command.start = HOVER_START_FRAME;
+  command.steer = driveMix.steer;
+  command.speed = driveMix.speed;
+  command.checksum = command.start ^ command.steer ^ command.speed;
+
+  hoverSerial.write(reinterpret_cast<uint8_t *>(&command), sizeof(command));
+  hoverTxCount++;
+}
+
+bool hoverFeedbackChecksumOk(const HoverFeedback &feedback) {
+  const uint16_t checksum = feedback.start ^ feedback.cmd1 ^ feedback.cmd2 ^
+                            feedback.speedR ^ feedback.speedL ^ feedback.batVoltage ^
+                            feedback.boardTemp ^ feedback.cmdLed;
+  return feedback.start == HOVER_START_FRAME && checksum == feedback.checksum;
+}
+
+void readHoverFeedback() {
+  while (hoverSerial.available()) {
+    const uint8_t incomingByte = hoverSerial.read();
+    const uint16_t startFrame = (static_cast<uint16_t>(incomingByte) << 8) | hoverBytePrev;
+
+    if (startFrame == HOVER_START_FRAME) {
+      hoverFeedbackPtr = reinterpret_cast<uint8_t *>(&hoverFeedbackIn);
+      *hoverFeedbackPtr++ = hoverBytePrev;
+      *hoverFeedbackPtr++ = incomingByte;
+      hoverFeedbackIndex = 2;
+    } else if (hoverFeedbackIndex >= 2 && hoverFeedbackIndex < sizeof(HoverFeedback)) {
+      *hoverFeedbackPtr++ = incomingByte;
+      hoverFeedbackIndex++;
+    }
+
+    if (hoverFeedbackIndex == sizeof(HoverFeedback)) {
+      if (hoverFeedbackChecksumOk(hoverFeedbackIn)) {
+        hoverFeedback = hoverFeedbackIn;
+        hoverRxCount++;
+        lastHoverFeedbackMs = millis();
+      } else {
+        hoverCrcFailCount++;
+      }
+      hoverFeedbackIndex = 0;
+    }
+
+    hoverBytePrev = incomingByte;
+  }
+}
+
 void updateBatteryVoltage() {
   const uint32_t now = millis();
   if (now - lastBatterySampleMs < 200) {
@@ -385,8 +490,11 @@ void updateBatteryVoltage() {
 }
 
 void handleApiChannels() {
+  const uint32_t hoverAgeMs = lastHoverFeedbackMs == 0 ? 999999 : millis() - lastHoverFeedbackMs;
+  const bool hoverLink = lastHoverFeedbackMs != 0 && hoverAgeMs < 500;
+
   String json;
-  json.reserve(1100);
+  json.reserve(1400);
   json += "{\"link\":";
   json += driveMix.link ? "true" : "false";
   json += ",\"age_ms\":";
@@ -399,6 +507,29 @@ void handleApiChannels() {
   json += badFrameCount;
   json += ",\"battery_v\":";
   json += String(batteryVoltage, 2);
+  json += ",\"hover\":{\"link\":";
+  json += hoverLink ? "true" : "false";
+  json += ",\"age_ms\":";
+  json += hoverAgeMs;
+  json += ",\"tx\":";
+  json += hoverTxCount;
+  json += ",\"rx\":";
+  json += hoverRxCount;
+  json += ",\"crc_fail\":";
+  json += hoverCrcFailCount;
+  json += ",\"cmd1\":";
+  json += hoverFeedback.cmd1;
+  json += ",\"cmd2\":";
+  json += hoverFeedback.cmd2;
+  json += ",\"speed_r\":";
+  json += hoverFeedback.speedR;
+  json += ",\"speed_l\":";
+  json += hoverFeedback.speedL;
+  json += ",\"bat\":";
+  json += hoverFeedback.batVoltage;
+  json += ",\"temp\":";
+  json += hoverFeedback.boardTemp;
+  json += '}';
   json += ",\"control\":{\"armed\":";
   json += driveMix.armed ? "true" : "false";
   json += ",\"mode\":";
@@ -481,6 +612,7 @@ void setup() {
   analogSetPinAttenuation(VBAT_ADC_PIN, ADC_11db);
 
   crsfSerial.begin(CRSF_BAUD, SERIAL_8N1, CRSF_RX_PIN, CRSF_TX_PIN);
+  hoverSerial.begin(HOVER_BAUD, SERIAL_8N1, HOVER_RX_PIN, HOVER_TX_PIN);
 
   startWifi();
 
@@ -494,11 +626,17 @@ void setup() {
 
   Serial.print("CRSF RX pin: GPIO");
   Serial.println(CRSF_RX_PIN);
+  Serial.print("Hover RX/TX pins: GPIO");
+  Serial.print(HOVER_RX_PIN);
+  Serial.print("/GPIO");
+  Serial.println(HOVER_TX_PIN);
 }
 
 void loop() {
   readCrsf();
   updateDriveMix();
+  sendHoverCommand();
+  readHoverFeedback();
   updateBatteryVoltage();
   server.handleClient();
 }
