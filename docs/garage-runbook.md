@@ -36,7 +36,7 @@ ESP32:
 - web UI работает на `http://kosar.local/`;
 - CRSF с ELRS receiver читается;
 - каналы видны в вебморде;
-- добавлен web debug control;
+- добавлен web debug cockpit;
 - добавлена отправка EFeru serial-команд в hoverboard;
 - добавлено чтение hoverboard feedback.
 
@@ -163,6 +163,7 @@ firmware/esp32-crsf-web
 - читает hoverboard feedback;
 - даёт web debug control без пульта;
 - даёт Motor Test как в Betaflight: левый, правый, оба, направление, 0..100%.
+- показывает hover feedback, onboard logs и network status.
 
 Прошить:
 
@@ -223,6 +224,17 @@ speed = -32768
 
 Нужен, когда пульт разряжен или ELRS не готов.
 
+Вебморда теперь не просто «ползунок газа», а маленький bench cockpit:
+
+```text
+Drive     -> web-drive, arm, profile, speed/steer
+Motors    -> левый/правый/оба мотора, direction, ZERO
+Channels  -> 16 CRSF каналов, подписи живут в browser localStorage
+Hover     -> UART feedback от hoverboard
+Logs      -> RAM ring-buffer событий
+Network   -> STA/AP, IP, mDNS, heap, uptime
+```
+
 Веб-блок:
 
 ```text
@@ -242,6 +254,17 @@ Failsafe:
 если web drive выключен -> COAST/OFF
 если web arm off -> COAST/OFF
 ```
+
+Защита от тупых случайностей:
+
+```text
+/api/webdrive  -> только POST + boot token
+/api/motortest -> только POST + boot token
+GET на управление -> 405, без изменения состояния
+reload/unload страницы -> best-effort: сначала safe-off UI, потом попытка safe-off command
+```
+
+Это не банковская безопасность и не интернет-API. Это гаражный предохранитель от CSRF/случайной ссылки/автовосстановления формы браузером. Наружу в интернет эту штуку не выставлять.
 
 ## Сцена 6.5. Motor Test
 

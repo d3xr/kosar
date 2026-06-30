@@ -63,6 +63,8 @@ ESP32-стенд:
 - web debug control: можно рулить без пульта;
 - Motor Test: левый/правый/оба мотора, 0..100%, forward/reverse;
 - failsafe web heartbeat: 500 ms.
+- debug cockpit: Drive, Motors, Channels, Hover, Logs, Network;
+- web-control API: `POST + boot token`, случайный `GET` моторы не оживляет.
 
 Патчи с безопасным конфигом:
 
