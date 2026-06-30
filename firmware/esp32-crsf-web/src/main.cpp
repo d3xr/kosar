@@ -22,9 +22,12 @@ static constexpr float VBAT_R_BOTTOM = 27000.0f;
 static constexpr uint32_t WEB_DRIVE_TIMEOUT_MS = 500;
 static constexpr uint32_t MOTOR_TEST_TIMEOUT_MS = 500;
 static constexpr int16_t MOTOR_TEST_MAX_COMMAND = 1000;
+static constexpr size_t LOG_EVENT_CAPACITY = 128;
+static constexpr uint32_t COAST_HOLD_MS = 250;
 
 static constexpr const char *AP_SSID = "Kosar-RC";
 static constexpr const char *AP_PASS = "kosar1234";
+static constexpr const char *HOSTNAME = "kosar";
 
 #ifndef KOSAR_WIFI_SSID
 #define KOSAR_WIFI_SSID ""
@@ -125,6 +128,16 @@ DriveMix driveMix;
 WebDriveState webDrive;
 MotorTestState motorTest;
 
+struct LogEvent {
+  uint32_t seq = 0;
+  uint32_t ms = 0;
+  char level[6] = {};
+  char type[12] = {};
+  char msg[48] = {};
+  int32_t a = 0;
+  int32_t b = 0;
+};
+
 uint16_t channelsRaw[CRSF_CHANNEL_COUNT] = {};
 uint16_t channelsUs[CRSF_CHANNEL_COUNT] = {};
 uint32_t lastFrameMs = 0;
@@ -143,6 +156,20 @@ HoverFeedback hoverFeedbackIn = {};
 uint8_t hoverFeedbackIndex = 0;
 uint8_t *hoverFeedbackPtr = nullptr;
 uint8_t hoverBytePrev = 0;
+LogEvent logEvents[LOG_EVENT_CAPACITY] = {};
+uint32_t logSeqLatest = 0;
+uint32_t logDropped = 0;
+size_t logCount = 0;
+size_t logWriteIndex = 0;
+bool wifiApMode = false;
+bool mdnsStarted = false;
+uint32_t forceCoastUntilMs = 0;
+
+bool prevCrsfLink = false;
+bool prevHoverLink = false;
+bool prevArmed = false;
+bool prevWebActive = false;
+bool prevMotorActive = false;
 
 enum class ParserState {
   WaitAddress,
@@ -164,240 +191,164 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kosar RC Bench</title>
 <style>
-:root{color-scheme:dark;--bg:#111312;--panel:#1b201d;--line:#303830;--text:#eff6ef;--muted:#9aa79b;--hot:#ffcc4d;--ok:#35d07f;--bad:#ff5a5f}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.35 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-main{width:min(1120px,100%);margin:0 auto;padding:18px}
-header{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
-h1{font-size:22px;margin:0;letter-spacing:0}p{margin:4px 0 0;color:var(--muted)}
-.status{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.pill{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 9px;min-width:92px;text-align:center}
-.pill b{display:block;font-size:17px}.pill span{color:var(--muted);font-size:12px}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.control{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
-.feedback{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
-.webdrive,.motortest{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
-.webdrive label,.motortest label{display:grid;gap:6px;color:var(--muted);font-size:12px}.webdrive input[type=range],.motortest input[type=range]{width:100%}.webdrive input[type=checkbox],.motortest input[type=checkbox]{width:22px;height:22px;accent-color:var(--hot)}
-.webdrive select,.webdrive button,.motortest select,.motortest button{border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:9px;font:inherit}
-.webdrive button,.motortest button{cursor:pointer}.webdrive button:active,.motortest button:active{transform:translateY(1px)}
-.metric{border:1px solid var(--line);border-radius:7px;padding:8px;background:#111512}.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.metric span{color:var(--muted);font-size:12px}
-.ch{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px;display:grid;grid-template-columns:64px minmax(90px,160px) 1fr 72px;gap:10px;align-items:center;min-height:54px}
-.idx{color:var(--muted);font-weight:700}.label{width:100%;border:1px solid var(--line);background:#111512;color:var(--text);border-radius:6px;padding:8px;font:inherit}
-.bar{height:16px;border-radius:5px;background:#0a0c0b;border:1px solid #283029;overflow:hidden}.fill{height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--hot));transition:width .08s linear}
-.value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}.dead .fill{background:var(--bad)}.dead #link{color:var(--bad)}
-@media (max-width:920px){.control{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:920px){.feedback{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:920px){.webdrive,.motortest{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:760px){.grid{grid-template-columns:1fr}.ch{grid-template-columns:50px 1fr 66px}.bar{grid-column:1/-1}.status{justify-content:flex-start}header{display:block}.control,.feedback,.webdrive,.motortest{grid-template-columns:repeat(2,minmax(0,1fr))}}
+:root{color-scheme:dark;--bg:#0d100e;--panel:#171c19;--panel2:#101411;--line:#313a33;--text:#f1f7ef;--muted:#91a094;--hot:#f4d44d;--acid:#56e07f;--bad:#ff4d5d;--warn:#ff9f43}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#1d261c 0,#0d100e 34rem);color:var(--text);font:15px/1.35 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{width:min(1180px,100%);margin:0 auto;padding:16px}header{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:12px}
+h1{margin:0;font-size:23px;letter-spacing:0}.sub{margin:3px 0 0;color:var(--muted)}.top{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.pill,.metric{border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2));border-radius:8px;padding:8px 10px}.pill{min-width:90px;text-align:center}.pill b,.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.pill span,.metric span,label span{display:block;color:var(--muted);font-size:12px}
+.tabs{display:flex;gap:7px;overflow:auto;margin:10px 0 14px;padding-bottom:2px}.tab{border:1px solid var(--line);background:#121712;color:var(--muted);border-radius:8px;padding:9px 12px;font:inherit;white-space:nowrap;cursor:pointer}.tab.active{color:var(--text);border-color:#6d7444;box-shadow:inset 0 -2px 0 var(--hot)}
+.panel{display:none}.panel.active{display:block}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.grid6{grid-template-columns:repeat(6,minmax(0,1fr))}.controls{border:1px solid var(--line);background:rgba(23,28,25,.92);border-radius:8px;padding:12px;margin-top:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
+label{display:grid;gap:7px;color:var(--muted);font-size:12px}input,select,button{font:inherit}input[type=range]{width:100%;accent-color:var(--hot)}input[type=checkbox]{width:24px;height:24px;accent-color:var(--hot)}
+select,.button{border:1px solid var(--line);background:#0b0f0c;color:var(--text);border-radius:7px;padding:10px}.button{cursor:pointer}.button:active{transform:translateY(1px)}.danger{border-color:#6b2730;background:#231014;color:#ffd7dc}.zero{border-color:#6b5a1d;background:#211d0d;color:#fff0ad}
+.channels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ch{border:1px solid var(--line);background:rgba(23,28,25,.92);border-radius:8px;padding:10px;display:grid;grid-template-columns:54px minmax(95px,160px) 1fr 72px;gap:10px;align-items:center;min-height:54px}.idx{color:var(--muted);font-weight:800}.label{width:100%;border:1px solid var(--line);background:#0b0f0c;color:var(--text);border-radius:7px;padding:8px}.bar{height:16px;border-radius:5px;background:#060806;border:1px solid #293129;overflow:hidden}.fill{height:100%;width:0;background:linear-gradient(90deg,var(--acid),var(--hot));transition:width .08s linear}.value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.logbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px}.logs{height:52vh;min-height:320px;overflow:auto;border:1px solid var(--line);background:#080b08;border-radius:8px;padding:8px;font:13px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.log{display:grid;grid-template-columns:70px 56px 92px 1fr 52px 52px;gap:8px;padding:5px 4px;border-bottom:1px solid #141a15}.log.warn{color:#ffd18a}.log.error{color:#ff9aa4}.chip{border:1px solid var(--line);border-radius:99px;padding:2px 7px;color:var(--muted)}
+.dead #link,.bad{color:var(--bad)}.ok{color:var(--acid)}.warnText{color:var(--warn)}.mock{color:var(--hot)}
+@media(max-width:920px){.grid,.grid6,.controls{grid-template-columns:repeat(2,minmax(0,1fr))}.channels{grid-template-columns:1fr}header{display:block}.top{justify-content:flex-start;margin-top:10px}}
+@media(max-width:620px){main{padding:10px}.controls,.grid,.grid6{grid-template-columns:1fr}.ch{grid-template-columns:48px 1fr 66px}.bar{grid-column:1/-1}.log{grid-template-columns:58px 48px 1fr}.log .hideMob{display:none}}
 </style>
 </head>
 <body>
 <main>
 <header>
-  <div>
-    <h1>Kosar RC Bench</h1>
-    <p>ELRS/CRSF live channels. Labels stay only in this browser.</p>
-  </div>
-  <div class="status">
-    <div class="pill"><b id="link">...</b><span>link</span></div>
-    <div class="pill"><b id="age">...</b><span>age ms</span></div>
-    <div class="pill"><b id="frames">0</b><span>frames</span></div>
-    <div class="pill"><b id="crc">0</b><span>crc fail</span></div>
+  <div><h1>Kosar RC Bench <span id="mockBadge" class="mock"></span></h1><p class="sub">ELRS, hover UART, web debug. No fluff, just knobs and truth.</p></div>
+  <div class="top">
+    <div class="pill"><b id="link">...</b><span>crsf</span></div>
+    <div class="pill"><b id="hover">...</b><span>hover</span></div>
+    <div class="pill"><b id="armed">NO</b><span>armed</span></div>
+    <div class="pill"><b id="source">rc</b><span>source</span></div>
   </div>
 </header>
-<section class="control">
-  <div class="metric"><b id="armed">NO</b><span>armed</span></div>
-  <div class="metric"><b id="profile">low</b><span>profile</span></div>
-  <div class="metric"><b id="accel">0</b><span>accel/s</span></div>
-  <div class="metric"><b id="speed">0</b><span>speed cmd</span></div>
-  <div class="metric"><b id="steer">0</b><span>steer cmd</span></div>
-  <div class="metric"><b id="left">0</b><span>left motor</span></div>
-  <div class="metric"><b id="right">0</b><span>right motor</span></div>
-  <div class="metric"><b id="battery">--.-</b><span>battery V</span></div>
+<nav class="tabs">
+  <button class="tab active" data-tab="drive">Drive</button><button class="tab" data-tab="motors">Motors</button><button class="tab" data-tab="channels">Channels</button><button class="tab" data-tab="hoverTab">Hover</button><button class="tab" data-tab="logs">Logs</button><button class="tab" data-tab="network">Network</button>
+</nav>
+<section id="drive" class="panel active">
+  <div class="grid">
+    <div class="metric"><b id="profile">low</b><span>profile</span></div><div class="metric"><b id="speed">0</b><span>speed cmd</span></div><div class="metric"><b id="steer">0</b><span>steer cmd</span></div><div class="metric"><b id="battery">--.-</b><span>ESP battery V</span></div>
+    <div class="metric"><b id="left">0</b><span>left motor</span></div><div class="metric"><b id="right">0</b><span>right motor</span></div><div class="metric"><b id="accel">0</b><span>accel/s</span></div><div class="metric"><b id="age">---</b><span>CRSF age ms</span></div>
+  </div>
+  <div class="controls">
+    <label><span>web drive</span><input id="webEnabled" type="checkbox"></label><label><span>web arm</span><input id="webArm" type="checkbox"></label>
+    <label><span>profile</span><select id="webMode"><option value="1">low</option><option value="2">mid</option><option value="3">max</option></select></label><button id="webStop" class="button danger" type="button">STOP</button>
+    <label><span>speed <b id="webSpeedVal">0</b></span><input id="webSpeed" type="range" min="-100" max="100" value="0"></label><label><span>steer <b id="webSteerVal">0</b></span><input id="webSteer" type="range" min="-100" max="100" value="0"></label>
+    <div class="metric"><b id="webAge">---</b><span>web age ms</span></div><div class="metric"><b id="frames">0</b><span>frames</span></div>
+  </div>
 </section>
-<section class="feedback">
-  <div class="metric"><b id="hover">NO</b><span>hoverboard</span></div>
-  <div class="metric"><b id="hcmd">0 / 0</b><span>cmd steer/speed</span></div>
-  <div class="metric"><b id="hspeed">0 / 0</b><span>rpm R/L</span></div>
-  <div class="metric"><b id="hbat">0</b><span>board bat</span></div>
-  <div class="metric"><b id="htemp">0</b><span>board temp</span></div>
-  <div class="metric"><b id="hcrc">0</b><span>hover crc fail</span></div>
+<section id="motors" class="panel">
+  <div class="grid">
+    <div class="metric"><b id="mLeftView">0</b><span>left command</span></div><div class="metric"><b id="mRightView">0</b><span>right command</span></div><div class="metric"><b id="motorAge">---</b><span>heartbeat age</span></div><div class="metric"><b id="crc">0</b><span>CRSF crc fail</span></div>
+  </div>
+  <div class="controls">
+    <label><span>motor test</span><input id="motorEnabled" type="checkbox"></label><label><span>test arm</span><input id="motorArm" type="checkbox"></label>
+    <label><span>direction</span><select id="motorDirection"><option value="0">forward</option><option value="1">reverse</option></select></label><button id="motorStop" class="button zero" type="button">ZERO</button>
+    <label><span>left <b id="motorLeftVal">0</b></span><input id="motorLeft" type="range" min="0" max="100" value="0"></label><label><span>right <b id="motorRightVal">0</b></span><input id="motorRight" type="range" min="0" max="100" value="0"></label><label><span>both <b id="motorBothVal">0</b></span><input id="motorBoth" type="range" min="0" max="100" value="0"></label><button id="motorHardStop" class="button danger" type="button">STOP</button>
+  </div>
 </section>
-<section class="webdrive">
-  <label>web drive<input id="webEnabled" type="checkbox"></label>
-  <label>web arm<input id="webArm" type="checkbox"></label>
-  <label>profile<select id="webMode"><option value="1">low</option><option value="2">mid</option><option value="3">max</option></select></label>
-  <button id="webStop" type="button">STOP</button>
-  <label>speed <b id="webSpeedVal">0</b><input id="webSpeed" type="range" min="-100" max="100" value="0"></label>
-  <label>steer <b id="webSteerVal">0</b><input id="webSteer" type="range" min="-100" max="100" value="0"></label>
-  <div class="metric"><b id="source">rc</b><span>source</span></div>
-  <div class="metric"><b id="webAge">---</b><span>web age ms</span></div>
+<section id="channels" class="panel"><div class="channels" id="channelsGrid"></div></section>
+<section id="hoverTab" class="panel">
+  <div class="grid grid6">
+    <div class="metric"><b id="hAge">---</b><span>age ms</span></div><div class="metric"><b id="hcmd">0 / 0</b><span>cmd steer/speed</span></div><div class="metric"><b id="hspeed">0 / 0</b><span>rpm R/L</span></div><div class="metric"><b id="hbat">0</b><span>board bat</span></div><div class="metric"><b id="htemp">0</b><span>board temp</span></div><div class="metric"><b id="hcrc">0</b><span>hover crc</span></div>
+    <div class="metric"><b id="htx">0</b><span>tx</span></div><div class="metric"><b id="hrx">0</b><span>rx</span></div><div class="metric"><b id="targetSpeed">0</b><span>target speed</span></div><div class="metric"><b id="targetSteer">0</b><span>target steer</span></div><div class="metric"><b id="maxCmd">0</b><span>max cmd</span></div><div class="metric"><b id="freeHeap">0</b><span>heap</span></div>
+  </div>
 </section>
-<section class="motortest">
-  <label>motor test<input id="motorEnabled" type="checkbox"></label>
-  <label>test arm<input id="motorArm" type="checkbox"></label>
-  <label>direction<select id="motorDirection"><option value="0">forward</option><option value="1">reverse</option></select></label>
-  <button id="motorStop" type="button">ZERO</button>
-  <label>left <b id="motorLeftVal">0</b><input id="motorLeft" type="range" min="0" max="100" value="0"></label>
-  <label>right <b id="motorRightVal">0</b><input id="motorRight" type="range" min="0" max="100" value="0"></label>
-  <label>both <b id="motorBothVal">0</b><input id="motorBoth" type="range" min="0" max="100" value="0"></label>
-  <div class="metric"><b id="motorAge">---</b><span>motor age ms</span></div>
+<section id="logs" class="panel">
+  <div class="logbar"><div><span class="chip" id="logSeq">seq 0</span> <span class="chip" id="logDropped">dropped 0</span></div><label style="display:flex;gap:8px;align-items:center"><input id="autoScroll" type="checkbox" checked> <span>autoscroll</span></label></div>
+  <div id="logList" class="logs"></div>
 </section>
-<section class="grid" id="channels"></section>
+<section id="network" class="panel">
+  <div class="grid">
+    <div class="metric"><b id="netMode">---</b><span>mode</span></div><div class="metric"><b id="netIp">---</b><span>ip</span></div><div class="metric"><b id="netSsid">---</b><span>ssid</span></div><div class="metric"><b id="netRssi">---</b><span>rssi</span></div>
+    <div class="metric"><b id="netHost">kosar</b><span>hostname</span></div><div class="metric"><b id="netMdns">---</b><span>mDNS</span></div><div class="metric"><b id="uptime">0</b><span>uptime ms</span></div><div class="metric"><b id="heapNet">0</b><span>free heap</span></div>
+  </div>
+</section>
 </main>
 <script>
-const root=document.getElementById('channels');
-const webEnabled=document.getElementById('webEnabled');
-const webArm=document.getElementById('webArm');
-const webMode=document.getElementById('webMode');
-const webSpeed=document.getElementById('webSpeed');
-const webSteer=document.getElementById('webSteer');
-const webSpeedVal=document.getElementById('webSpeedVal');
-const webSteerVal=document.getElementById('webSteerVal');
-const motorEnabled=document.getElementById('motorEnabled');
-const motorArm=document.getElementById('motorArm');
-const motorDirection=document.getElementById('motorDirection');
-const motorLeft=document.getElementById('motorLeft');
-const motorRight=document.getElementById('motorRight');
-const motorBoth=document.getElementById('motorBoth');
-const motorLeftVal=document.getElementById('motorLeftVal');
-const motorRightVal=document.getElementById('motorRightVal');
-const motorBothVal=document.getElementById('motorBothVal');
-let lastWebSend=0;
-let lastMotorSend=0;
-const names=["Roll","Pitch","Throttle","Yaw","Arm","Mode","Aux 3","Aux 4","Aux 5","Aux 6","Aux 7","Aux 8","Aux 9","Aux 10","Aux 11","Aux 12"];
-for(let i=0;i<16;i++){
-  const saved=localStorage.getItem('kosar.ch'+i)||names[i]||('CH '+(i+1));
-  const row=document.createElement('div');
-  row.className='ch';
-  row.innerHTML=`<div class="idx">CH${i+1}</div><input class="label" value="${saved.replaceAll('"','&quot;')}"><div class="bar"><div class="fill"></div></div><div class="value">----</div>`;
-  row.querySelector('input').addEventListener('input',e=>localStorage.setItem('kosar.ch'+i,e.target.value));
-  root.appendChild(row);
-}
-function stopWebDrive(){
-  webEnabled.checked=false;
-  webArm.checked=false;
-  webSpeed.value=0;
-  webSteer.value=0;
-  webSpeedVal.textContent='0';
-  webSteerVal.textContent='0';
-  sendWebDrive(true);
-}
-function disableWebDrive(){
-  webEnabled.checked=false;
-  webArm.checked=false;
-  webSpeed.value=0;
-  webSteer.value=0;
-  webSpeedVal.textContent='0';
-  webSteerVal.textContent='0';
-  sendWebDrive(true);
-}
-async function sendWebDrive(force=false){
-  const now=Date.now();
-  if(!force && now-lastWebSend<80)return;
-  lastWebSend=now;
-  webSpeedVal.textContent=webSpeed.value;
-  webSteerVal.textContent=webSteer.value;
-  const params=new URLSearchParams({
-    enabled:webEnabled.checked?'1':'0',
-    armed:webArm.checked?'1':'0',
-    mode:webMode.value,
-    speed:webSpeed.value,
-    steer:webSteer.value
-  });
-  try{await fetch('/api/webdrive?'+params.toString(),{cache:'no-store'});}catch(e){}
-}
-function zeroMotorTest(){
-  motorArm.checked=false;
-  motorLeft.value=0;
-  motorRight.value=0;
-  motorBoth.value=0;
-  motorLeftVal.textContent='0';
-  motorRightVal.textContent='0';
-  motorBothVal.textContent='0';
-  sendMotorTest(true);
-}
-function disableMotorTest(){
-  motorEnabled.checked=false;
-  motorArm.checked=false;
-  motorLeft.value=0;
-  motorRight.value=0;
-  motorBoth.value=0;
-  motorLeftVal.textContent='0';
-  motorRightVal.textContent='0';
-  motorBothVal.textContent='0';
-  sendMotorTest(true);
-}
-async function sendMotorTest(force=false){
-  const now=Date.now();
-  if(!force && now-lastMotorSend<80)return;
-  lastMotorSend=now;
-  motorLeftVal.textContent=motorLeft.value;
-  motorRightVal.textContent=motorRight.value;
-  motorBothVal.textContent=motorBoth.value;
-  const params=new URLSearchParams({
-    enabled:motorEnabled.checked?'1':'0',
-    armed:motorArm.checked?'1':'0',
-    reverse:motorDirection.value,
-    left:motorLeft.value,
-    right:motorRight.value
-  });
-  try{await fetch('/api/motortest?'+params.toString(),{cache:'no-store'});}catch(e){}
-}
-document.getElementById('webStop').addEventListener('click',stopWebDrive);
-document.getElementById('motorStop').addEventListener('click',zeroMotorTest);
-webEnabled.addEventListener('input',()=>{if(webEnabled.checked)disableMotorTest();sendWebDrive(true)});
-[webArm,webMode,webSpeed,webSteer].forEach(el=>el.addEventListener('input',()=>sendWebDrive(true)));
-motorBoth.addEventListener('input',()=>{
-  motorLeft.value=motorBoth.value;
-  motorRight.value=motorBoth.value;
-  sendMotorTest(true);
-});
-motorEnabled.addEventListener('input',()=>{if(motorEnabled.checked)disableWebDrive();sendMotorTest(true)});
-[motorArm,motorDirection,motorLeft,motorRight].forEach(el=>el.addEventListener('input',()=>sendMotorTest(true)));
-setInterval(()=>{if(webEnabled.checked)sendWebDrive(false)},100);
-setInterval(()=>{if(motorEnabled.checked)sendMotorTest(false)},100);
-async function tick(){
-  try{
-    const r=await fetch('/api/channels',{cache:'no-store'});
-    const d=await r.json();
-    document.body.classList.toggle('dead',!d.link);
-    document.getElementById('link').textContent=d.link?'OK':'NO';
-    document.getElementById('age').textContent=d.age_ms;
-    document.getElementById('frames').textContent=d.frames;
-    document.getElementById('crc').textContent=d.crc_fail;
-    document.getElementById('armed').textContent=d.control.armed?'YES':'NO';
-    document.getElementById('source').textContent=d.control.source;
-    document.getElementById('webAge').textContent=d.web_drive.age_ms;
-    document.getElementById('motorAge').textContent=d.motor_test.age_ms;
-    document.getElementById('profile').textContent=d.control.profile;
-    document.getElementById('accel').textContent=d.control.accel;
-    document.getElementById('speed').textContent=d.control.speed;
-    document.getElementById('steer').textContent=d.control.steer;
-    document.getElementById('left').textContent=d.control.left;
-    document.getElementById('right').textContent=d.control.right;
-    document.getElementById('battery').textContent=d.battery_v.toFixed(1);
-    document.getElementById('hover').textContent=d.hover.link?'OK':'NO';
-    document.getElementById('hcmd').textContent=d.hover.cmd1+' / '+d.hover.cmd2;
-    document.getElementById('hspeed').textContent=d.hover.speed_r+' / '+d.hover.speed_l;
-    document.getElementById('hbat').textContent=d.hover.bat;
-    document.getElementById('htemp').textContent=d.hover.temp;
-    document.getElementById('hcrc').textContent=d.hover.crc_fail;
-    d.channels.forEach((ch,i)=>{
-      const row=root.children[i];
-      const pct=Math.max(0,Math.min(100,(ch.us-988)/(2012-988)*100));
-      row.querySelector('.fill').style.width=pct+'%';
-      row.querySelector('.value').textContent=ch.us+' us';
-    });
-  }catch(e){
-    document.body.classList.add('dead');
-    document.getElementById('link').textContent='NO';
-  }
-}
-setInterval(tick,100);tick();
+const $=id=>document.getElementById(id);
+const isMock=new URLSearchParams(location.search).has('mock');
+if(isMock)$('mockBadge').textContent='// MOCK';
+document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.tab).classList.add('active')}));
+const root=$('channelsGrid'),webEnabled=$('webEnabled'),webArm=$('webArm'),webMode=$('webMode'),webSpeed=$('webSpeed'),webSteer=$('webSteer'),webSpeedVal=$('webSpeedVal'),webSteerVal=$('webSteerVal');
+const motorEnabled=$('motorEnabled'),motorArm=$('motorArm'),motorDirection=$('motorDirection'),motorLeft=$('motorLeft'),motorRight=$('motorRight'),motorBoth=$('motorBoth'),motorLeftVal=$('motorLeftVal'),motorRightVal=$('motorRightVal'),motorBothVal=$('motorBothVal');
+let lastWebSend=0,lastMotorSend=0,lastLogSeq=0,mockFrames=420,mockT=0;
+const names=["Roll","Pitch","Throttle","Yaw","Arm","Mode (3x)","Aux 3","Return home","Beep","Buttons (6x)","Aux 7","Aux 8","Aux 9","Aux 10","Aux 11","Aux 12"];
+for(let i=0;i<16;i++){const saved=localStorage.getItem('kosar.ch'+i)||names[i]||('CH '+(i+1));const row=document.createElement('div');row.className='ch';row.innerHTML=`<div class="idx">CH${i+1}</div><input class="label" value="${saved.replaceAll('"','&quot;')}"><div class="bar"><div class="fill"></div></div><div class="value">----</div>`;row.querySelector('input').addEventListener('input',e=>localStorage.setItem('kosar.ch'+i,e.target.value));root.appendChild(row)}
+function api(path){if(isMock)return Promise.resolve(mockApi(path));return fetch(path,{cache:'no-store'}).then(r=>r.json())}
+function mockApi(path){mockT+=1;if(path.startsWith('/api/network'))return{mode:'ap',status:'AP',hostname:'kosar',ip:'192.168.4.1',ssid:'',rssi:0,ap_ssid:'Kosar-RC',mdns:true,uptime_ms:Date.now()%999999,free_heap:181240};if(path.startsWith('/api/logs')){let ev=[];for(let i=0;i<3;i++){lastLogSeq++;ev.push({seq:lastLogSeq,ms:Date.now()%999999,level:i==1?'warn':'info',type:['boot','wifi','hover'][i],msg:['bench mock alive','AP fallback Kosar-RC','hover link up'][i],a:i,b:0})}return{seq_latest:lastLogSeq,dropped:0,events:ev}};const s=Math.round(Math.sin(mockT/8)*420),st=Math.round(Math.cos(mockT/11)*260);return{link:true,age_ms:18,frames:mockFrames++,crc_fail:2,bad_frames:0,battery_v:38.4,uptime_ms:Date.now()%999999,free_heap:181240,last_log_seq:lastLogSeq,web_drive:{enabled:webEnabled.checked,armed:webArm.checked,active:webEnabled.checked,age_ms:42,speed:+webSpeed.value,steer:+webSteer.value,mode:+webMode.value},motor_test:{enabled:motorEnabled.checked,armed:motorArm.checked,active:motorEnabled.checked,reverse:motorDirection.value==='1',age_ms:35,left:+motorLeft.value,right:+motorRight.value},hover:{link:true,age_ms:22,tx:mockFrames*2,rx:mockFrames,crc_fail:1,cmd1:st,cmd2:s,speed_r:s+7,speed_l:s-9,bat:384,temp:32},control:{armed:webArm.checked||motorArm.checked,source:motorEnabled.checked?'motor':(webEnabled.checked?'web':'rc'),mode:+webMode.value,profile:['low','mid','max'][+webMode.value-1],max:[250,600,1000][+webMode.value-1],accel:800,target_speed:s,target_steer:st,speed:s,steer:st,left:s+st,right:s-st},channels:Array.from({length:16},(_,i)=>({raw:992,us:i<4?1500+Math.round(Math.sin(mockT/10+i)*330):(i==4?1000:i==5?1500:1000)}))}}
+function stopWebDrive(){webEnabled.checked=false;webArm.checked=false;webSpeed.value=0;webSteer.value=0;webSpeedVal.textContent='0';webSteerVal.textContent='0';sendWebDrive(true)}
+function disableWebDrive(){webEnabled.checked=false;webArm.checked=false;webSpeed.value=0;webSteer.value=0;sendWebDrive(true)}
+async function sendWebDrive(force=false){const now=Date.now();if(!force&&now-lastWebSend<80)return;lastWebSend=now;webSpeedVal.textContent=webSpeed.value;webSteerVal.textContent=webSteer.value;try{await api('/api/webdrive?'+new URLSearchParams({enabled:webEnabled.checked?'1':'0',armed:webArm.checked?'1':'0',mode:webMode.value,speed:webSpeed.value,steer:webSteer.value}).toString())}catch(e){}}
+function zeroMotorTest(){motorArm.checked=false;motorLeft.value=0;motorRight.value=0;motorBoth.value=0;motorLeftVal.textContent='0';motorRightVal.textContent='0';motorBothVal.textContent='0';sendMotorTest(true)}
+function disableMotorTest(){motorEnabled.checked=false;motorArm.checked=false;motorLeft.value=0;motorRight.value=0;motorBoth.value=0;sendMotorTest(true)}
+async function sendMotorTest(force=false){const now=Date.now();if(!force&&now-lastMotorSend<80)return;lastMotorSend=now;motorLeftVal.textContent=motorLeft.value;motorRightVal.textContent=motorRight.value;motorBothVal.textContent=motorBoth.value;try{await api('/api/motortest?'+new URLSearchParams({enabled:motorEnabled.checked?'1':'0',armed:motorArm.checked?'1':'0',reverse:motorDirection.value,left:motorLeft.value,right:motorRight.value}).toString())}catch(e){}}
+$('webStop').addEventListener('click',stopWebDrive);$('motorStop').addEventListener('click',zeroMotorTest);$('motorHardStop').addEventListener('click',()=>{motorEnabled.checked=false;zeroMotorTest()});
+webEnabled.addEventListener('input',()=>{if(webEnabled.checked)disableMotorTest();sendWebDrive(true)});[webArm,webMode,webSpeed,webSteer].forEach(el=>el.addEventListener('input',()=>sendWebDrive(true)));
+motorBoth.addEventListener('input',()=>{motorLeft.value=motorBoth.value;motorRight.value=motorBoth.value;sendMotorTest(true)});motorEnabled.addEventListener('input',()=>{if(motorEnabled.checked)disableWebDrive();sendMotorTest(true)});[motorArm,motorDirection,motorLeft,motorRight].forEach(el=>el.addEventListener('input',()=>sendMotorTest(true)));
+setInterval(()=>{if(webEnabled.checked)sendWebDrive(false)},100);setInterval(()=>{if(motorEnabled.checked)sendMotorTest(false)},100);
+function put(id,v){$(id).textContent=v}
+async function tick(){try{const d=await api('/api/channels');document.body.classList.toggle('dead',!d.link);put('link',d.link?'OK':'NO');put('hover',d.hover.link?'OK':'NO');put('age',d.age_ms);put('frames',d.frames);put('crc',d.crc_fail);put('armed',d.control.armed?'YES':'NO');put('source',d.control.source);put('profile',d.control.profile);put('accel',d.control.accel);put('speed',d.control.speed);put('steer',d.control.steer);put('left',d.control.left);put('right',d.control.right);put('battery',Number(d.battery_v).toFixed(1));put('webAge',d.web_drive.age_ms);put('motorAge',d.motor_test.age_ms);put('mLeftView',d.motor_test.left);put('mRightView',d.motor_test.right);put('hAge',d.hover.age_ms);put('hcmd',d.hover.cmd1+' / '+d.hover.cmd2);put('hspeed',d.hover.speed_r+' / '+d.hover.speed_l);put('hbat',d.hover.bat);put('htemp',d.hover.temp);put('hcrc',d.hover.crc_fail);put('htx',d.hover.tx);put('hrx',d.hover.rx);put('targetSpeed',d.control.target_speed);put('targetSteer',d.control.target_steer);put('maxCmd',d.control.max);put('freeHeap',d.free_heap||0);d.channels.forEach((ch,i)=>{const row=root.children[i];const pct=Math.max(0,Math.min(100,(ch.us-988)/(2012-988)*100));row.querySelector('.fill').style.width=pct+'%';row.querySelector('.value').textContent=ch.us+' us'})}catch(e){document.body.classList.add('dead');put('link','NO')}}
+async function pollLogs(){try{const d=await api('/api/logs?since='+lastLogSeq+'&limit=40');lastLogSeq=d.seq_latest||lastLogSeq;put('logSeq','seq '+lastLogSeq);put('logDropped','dropped '+(d.dropped||0));const list=$('logList');(d.events||[]).forEach(ev=>{const row=document.createElement('div');row.className='log '+ev.level;row.innerHTML=`<span>${ev.ms}</span><span>${ev.level}</span><span class="hideMob">${ev.type}</span><span>${ev.msg}</span><span class="hideMob">${ev.a??''}</span><span class="hideMob">${ev.b??''}</span>`;list.appendChild(row);while(list.children.length>180)list.removeChild(list.firstChild)});if($('autoScroll').checked)list.scrollTop=list.scrollHeight}catch(e){}}
+async function pollNetwork(){try{const d=await api('/api/network');put('netMode',d.mode);put('netIp',d.ip);put('netSsid',d.mode==='ap'?d.ap_ssid:d.ssid);put('netRssi',d.mode==='sta'?d.rssi:'---');put('netHost',d.hostname);put('netMdns',d.mdns?'OK':'NO');put('uptime',d.uptime_ms);put('heapNet',d.free_heap)}catch(e){}}
+setInterval(tick,120);setInterval(pollLogs,900);setInterval(pollNetwork,2200);tick();pollLogs();pollNetwork();
 </script>
 </body>
 </html>
 )HTML";
+
+void copySmall(char *dest, size_t destSize, const char *src) {
+  if (destSize == 0) {
+    return;
+  }
+  size_t i = 0;
+  for (; i + 1 < destSize && src[i] != '\0'; i++) {
+    dest[i] = src[i];
+  }
+  dest[i] = '\0';
+}
+
+void logEvent(const char *level, const char *type, const char *msg, int32_t a = 0, int32_t b = 0) {
+  LogEvent &event = logEvents[logWriteIndex];
+  event.seq = ++logSeqLatest;
+  event.ms = millis();
+  copySmall(event.level, sizeof(event.level), level);
+  copySmall(event.type, sizeof(event.type), type);
+  copySmall(event.msg, sizeof(event.msg), msg);
+  event.a = a;
+  event.b = b;
+
+  logWriteIndex = (logWriteIndex + 1) % LOG_EVENT_CAPACITY;
+  if (logCount < LOG_EVENT_CAPACITY) {
+    logCount++;
+  } else {
+    logDropped++;
+  }
+
+  Serial.print("[");
+  Serial.print(level);
+  Serial.print("] ");
+  Serial.print(type);
+  Serial.print(": ");
+  Serial.println(msg);
+}
+
+void appendJsonEscaped(String &json, const char *value) {
+  json += '"';
+  for (size_t i = 0; value[i] != '\0'; i++) {
+    const char c = value[i];
+    if (c == '"' || c == '\\') {
+      json += '\\';
+      json += c;
+    } else if (static_cast<uint8_t>(c) < 0x20) {
+      json += ' ';
+    } else {
+      json += c;
+    }
+  }
+  json += '"';
+}
+
+bool hoverLinkNow() {
+  const uint32_t hoverAgeMs = lastHoverFeedbackMs == 0 ? 999999 : millis() - lastHoverFeedbackMs;
+  return lastHoverFeedbackMs != 0 && hoverAgeMs < 500;
+}
 
 uint8_t crc8DvbS2(const uint8_t *data, size_t len) {
   uint8_t crc = 0;
@@ -482,6 +433,27 @@ void updateDriveMix() {
 
   driveMix.ageMs = lastFrameMs == 0 ? 999999 : now - lastFrameMs;
   driveMix.link = lastFrameMs != 0 && driveMix.ageMs < 500;
+
+  if (webDrive.enabled && webDrive.lastUpdateMs != 0 &&
+      now - webDrive.lastUpdateMs >= WEB_DRIVE_TIMEOUT_MS) {
+    webDrive.enabled = false;
+    webDrive.armed = false;
+    webDrive.speed = 0;
+    webDrive.steer = 0;
+    forceCoastUntilMs = now + COAST_HOLD_MS;
+    logEvent("warn", "failsafe", "webdrive heartbeat lost", now - webDrive.lastUpdateMs, 0);
+  }
+
+  if (motorTest.enabled && motorTest.lastUpdateMs != 0 &&
+      now - motorTest.lastUpdateMs >= MOTOR_TEST_TIMEOUT_MS) {
+    motorTest.enabled = false;
+    motorTest.armed = false;
+    motorTest.left = 0;
+    motorTest.right = 0;
+    forceCoastUntilMs = now + COAST_HOLD_MS;
+    logEvent("warn", "failsafe", "motortest heartbeat lost", now - motorTest.lastUpdateMs, 0);
+  }
+
   driveMix.webActive = webDrive.enabled && webDrive.lastUpdateMs != 0 &&
                        now - webDrive.lastUpdateMs < WEB_DRIVE_TIMEOUT_MS;
   driveMix.motorTestActive = motorTest.enabled && motorTest.lastUpdateMs != 0 &&
@@ -534,6 +506,55 @@ void updateDriveMix() {
     -static_cast<int>(driveMix.profile->maxCommand),
     static_cast<int>(driveMix.profile->maxCommand)
   );
+
+  if (forceCoastUntilMs != 0 && now < forceCoastUntilMs) {
+    driveMix.armed = false;
+    driveMix.targetSpeed = 0;
+    driveMix.targetSteer = 0;
+    driveMix.speed = 0;
+    driveMix.steer = 0;
+    driveMix.left = 0;
+    driveMix.right = 0;
+  } else if (forceCoastUntilMs != 0 && now >= forceCoastUntilMs) {
+    forceCoastUntilMs = 0;
+  }
+}
+
+void updateTransitionLogs() {
+  const bool crsfLink = driveMix.link;
+  const bool hoverLink = hoverLinkNow();
+
+  if (crsfLink != prevCrsfLink) {
+    logEvent(crsfLink ? "info" : "warn", "link", crsfLink ? "CRSF link up" : "CRSF link down", driveMix.ageMs, 0);
+    if (!crsfLink && prevArmed && !prevWebActive && !prevMotorActive) {
+      logEvent("warn", "failsafe", "RC link lost while armed", driveMix.ageMs, 0);
+      forceCoastUntilMs = millis() + COAST_HOLD_MS;
+    }
+    prevCrsfLink = crsfLink;
+  }
+
+  if (hoverLink != prevHoverLink) {
+    logEvent(hoverLink ? "info" : "warn", "hover", hoverLink ? "hover feedback up" : "hover feedback lost", lastHoverFeedbackMs, 0);
+    prevHoverLink = hoverLink;
+  }
+
+  if (driveMix.armed != prevArmed) {
+    logEvent(driveMix.armed ? "info" : "info", driveMix.armed ? "arm" : "disarm", driveMix.armed ? "drive armed" : "drive disarmed", driveMix.mode, 0);
+    if (!driveMix.armed) {
+      logEvent("info", "coast", "COAST/OFF command active", 0, 0);
+    }
+    prevArmed = driveMix.armed;
+  }
+
+  if (driveMix.webActive != prevWebActive) {
+    logEvent(driveMix.webActive ? "info" : "info", "webdrive", driveMix.webActive ? "webdrive active" : "webdrive inactive", webDrive.enabled ? 1 : 0, webDrive.armed ? 1 : 0);
+    prevWebActive = driveMix.webActive;
+  }
+
+  if (driveMix.motorTestActive != prevMotorActive) {
+    logEvent(driveMix.motorTestActive ? "info" : "info", "motortest", driveMix.motorTestActive ? "motortest active" : "motortest inactive", motorTest.enabled ? 1 : 0, motorTest.armed ? 1 : 0);
+    prevMotorActive = driveMix.motorTestActive;
+  }
 }
 
 void decodeChannels(const uint8_t *payload, size_t len) {
@@ -624,6 +645,11 @@ void handleIndex() {
 }
 
 void handleWebDrive() {
+  const bool wasEnabled = webDrive.enabled;
+  const bool wasArmed = webDrive.armed;
+  const bool wasMotorEnabled = motorTest.enabled;
+  const bool wasMotorArmed = motorTest.armed;
+
   if (server.hasArg("enabled")) {
     webDrive.enabled = server.arg("enabled") == "1";
   }
@@ -644,6 +670,9 @@ void handleWebDrive() {
     webDrive.armed = false;
     webDrive.speed = 0;
     webDrive.steer = 0;
+    if (wasEnabled || wasArmed) {
+      forceCoastUntilMs = millis() + COAST_HOLD_MS;
+    }
   } else {
     motorTest.enabled = false;
     motorTest.armed = false;
@@ -652,10 +681,24 @@ void handleWebDrive() {
   }
 
   webDrive.lastUpdateMs = millis();
+  if (webDrive.enabled != wasEnabled) {
+    logEvent("info", "webdrive", webDrive.enabled ? "webdrive enabled" : "webdrive disabled", webDrive.speed, webDrive.steer);
+  }
+  if (webDrive.armed != wasArmed) {
+    logEvent("info", webDrive.armed ? "arm" : "disarm", webDrive.armed ? "webdrive armed" : "webdrive disarmed", webDrive.mode, 0);
+  }
+  if ((wasMotorEnabled || wasMotorArmed) && webDrive.enabled) {
+    logEvent("info", "motortest", "motortest disabled by webdrive", 0, 0);
+  }
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
 void handleMotorTest() {
+  const bool wasEnabled = motorTest.enabled;
+  const bool wasArmed = motorTest.armed;
+  const bool wasWebEnabled = webDrive.enabled;
+  const bool wasWebArmed = webDrive.armed;
+
   if (server.hasArg("enabled")) {
     motorTest.enabled = server.arg("enabled") == "1";
   }
@@ -676,6 +719,9 @@ void handleMotorTest() {
     motorTest.armed = false;
     motorTest.left = 0;
     motorTest.right = 0;
+    if (wasEnabled || wasArmed) {
+      forceCoastUntilMs = millis() + COAST_HOLD_MS;
+    }
   } else {
     webDrive.enabled = false;
     webDrive.armed = false;
@@ -684,6 +730,15 @@ void handleMotorTest() {
   }
 
   motorTest.lastUpdateMs = millis();
+  if (motorTest.enabled != wasEnabled) {
+    logEvent("info", "motortest", motorTest.enabled ? "motortest enabled" : "motortest disabled", motorTest.left, motorTest.right);
+  }
+  if (motorTest.armed != wasArmed) {
+    logEvent("info", motorTest.armed ? "arm" : "disarm", motorTest.armed ? "motortest armed" : "motortest disarmed", motorTest.left, motorTest.right);
+  }
+  if ((wasWebEnabled || wasWebArmed) && motorTest.enabled) {
+    logEvent("info", "webdrive", "webdrive disabled by motortest", 0, 0);
+  }
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -776,6 +831,12 @@ void handleApiChannels() {
   json += crcFailCount;
   json += ",\"bad_frames\":";
   json += badFrameCount;
+  json += ",\"uptime_ms\":";
+  json += millis();
+  json += ",\"free_heap\":";
+  json += ESP.getFreeHeap();
+  json += ",\"last_log_seq\":";
+  json += logSeqLatest;
   json += ",\"battery_v\":";
   json += String(batteryVoltage, 2);
   json += ",\"web_drive\":{\"enabled\":";
@@ -873,13 +934,102 @@ void handleApiChannels() {
   server.send(200, "application/json", json);
 }
 
+void handleApiLogs() {
+  uint32_t since = 0;
+  int limit = 40;
+  if (server.hasArg("since")) {
+    since = static_cast<uint32_t>(server.arg("since").toInt());
+  }
+  if (server.hasArg("limit")) {
+    limit = constrain(server.arg("limit").toInt(), 1, 80);
+  }
+
+  const uint32_t earliestSeq = logCount == 0 ? 0 : (logSeqLatest - logCount + 1);
+  String json;
+  json.reserve(4200);
+  json += "{\"seq_latest\":";
+  json += logSeqLatest;
+  json += ",\"dropped\":";
+  json += logDropped;
+  json += ",\"events\":[";
+
+  bool first = true;
+  int emitted = 0;
+  for (uint32_t seq = max<uint32_t>(since + 1, earliestSeq); seq <= logSeqLatest && emitted < limit; seq++) {
+    const size_t index = (logWriteIndex + LOG_EVENT_CAPACITY - (logSeqLatest - seq + 1)) % LOG_EVENT_CAPACITY;
+    const LogEvent &event = logEvents[index];
+    if (event.seq != seq) {
+      continue;
+    }
+    if (!first) {
+      json += ',';
+    }
+    first = false;
+    emitted++;
+    json += "{\"seq\":";
+    json += event.seq;
+    json += ",\"ms\":";
+    json += event.ms;
+    json += ",\"level\":";
+    appendJsonEscaped(json, event.level);
+    json += ",\"type\":";
+    appendJsonEscaped(json, event.type);
+    json += ",\"msg\":";
+    appendJsonEscaped(json, event.msg);
+    json += ",\"a\":";
+    json += event.a;
+    json += ",\"b\":";
+    json += event.b;
+    json += '}';
+  }
+  json += "]}";
+
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", json);
+}
+
+void handleApiNetwork() {
+  String ip = wifiApMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  String ssid = wifiApMode ? "" : WiFi.SSID();
+  String status = wifiApMode ? "AP" : (WiFi.status() == WL_CONNECTED ? "CONNECTED" : "DISCONNECTED");
+
+  String json;
+  json.reserve(420);
+  json += "{\"mode\":\"";
+  json += wifiApMode ? "ap" : "sta";
+  json += "\",\"status\":";
+  appendJsonEscaped(json, status.c_str());
+  json += ",\"hostname\":";
+  appendJsonEscaped(json, HOSTNAME);
+  json += ",\"ip\":";
+  appendJsonEscaped(json, ip.c_str());
+  json += ",\"ssid\":";
+  appendJsonEscaped(json, ssid.c_str());
+  json += ",\"rssi\":";
+  json += wifiApMode ? 0 : WiFi.RSSI();
+  json += ",\"ap_ssid\":";
+  appendJsonEscaped(json, wifiApMode ? AP_SSID : "");
+  json += ",\"mdns\":";
+  json += mdnsStarted ? "true" : "false";
+  json += ",\"uptime_ms\":";
+  json += millis();
+  json += ",\"free_heap\":";
+  json += ESP.getFreeHeap();
+  json += '}';
+
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", json);
+}
+
 void startWifi() {
   if (strlen(KOSAR_WIFI_SSID) > 0) {
     WiFi.mode(WIFI_STA);
+    wifiApMode = false;
     WiFi.begin(KOSAR_WIFI_SSID, KOSAR_WIFI_PASS);
 
     Serial.print("Connecting to Wi-Fi: ");
     Serial.println(KOSAR_WIFI_SSID);
+    logEvent("info", "wifi", "STA connect start", 0, 0);
 
     const uint32_t startedAt = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 10000) {
@@ -891,14 +1041,18 @@ void startWifi() {
     if (WiFi.status() == WL_CONNECTED) {
       Serial.print("STA IP: ");
       Serial.println(WiFi.localIP());
+      logEvent("info", "wifi", "STA connected", WiFi.RSSI(), 0);
       return;
     }
 
     Serial.println("Home Wi-Fi failed, falling back to AP");
+    logEvent("warn", "wifi", "STA connect failed", 0, 0);
   }
 
   WiFi.mode(WIFI_AP);
   WiFi.softAP(AP_SSID, AP_PASS);
+  wifiApMode = true;
+  logEvent("warn", "ap", "AP fallback started", 0, 0);
 
   Serial.print("AP: ");
   Serial.println(AP_SSID);
@@ -911,6 +1065,7 @@ void setup() {
   delay(250);
   Serial.println();
   Serial.println("Kosar RC Bench boot");
+  logEvent("info", "boot", "Kosar RC Bench boot", 0, 0);
 
   analogReadResolution(12);
   analogSetPinAttenuation(VBAT_ADC_PIN, ADC_11db);
@@ -922,12 +1077,18 @@ void setup() {
 
   server.on("/", HTTP_GET, handleIndex);
   server.on("/api/channels", HTTP_GET, handleApiChannels);
+  server.on("/api/logs", HTTP_GET, handleApiLogs);
+  server.on("/api/network", HTTP_GET, handleApiNetwork);
   server.on("/api/webdrive", HTTP_GET, handleWebDrive);
   server.on("/api/motortest", HTTP_GET, handleMotorTest);
   server.begin();
 
-  if (MDNS.begin("kosar")) {
+  if (MDNS.begin(HOSTNAME)) {
+    mdnsStarted = true;
     Serial.println("mDNS: http://kosar.local/");
+    logEvent("info", "wifi", "mDNS started", 0, 0);
+  } else {
+    logEvent("warn", "wifi", "mDNS failed", 0, 0);
   }
 
   Serial.print("CRSF RX pin: GPIO");
@@ -936,11 +1097,14 @@ void setup() {
   Serial.print(HOVER_RX_PIN);
   Serial.print("/GPIO");
   Serial.println(HOVER_TX_PIN);
+  logEvent("warn", "link", "CRSF link down initial", 0, 0);
+  logEvent("warn", "hover", "hover feedback absent initial", 0, 0);
 }
 
 void loop() {
   readCrsf();
   updateDriveMix();
+  updateTransitionLogs();
   sendHoverCommand();
   readHoverFeedback();
   updateBatteryVoltage();
