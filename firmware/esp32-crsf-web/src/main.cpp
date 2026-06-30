@@ -15,6 +15,7 @@ static constexpr int HOVER_TX_PIN = 25;
 static constexpr uint32_t HOVER_BAUD = 115200;
 static constexpr uint16_t HOVER_START_FRAME = 0xABCD;
 static constexpr uint32_t HOVER_SEND_INTERVAL_MS = 20;
+static constexpr int16_t HOVER_COAST_COMMAND = INT16_MIN;
 static constexpr int VBAT_ADC_PIN = 35;
 static constexpr float VBAT_R_TOP = 390000.0f;
 static constexpr float VBAT_R_BOTTOM = 27000.0f;
@@ -695,8 +696,8 @@ void sendHoverCommand() {
 
   HoverCommand command = {};
   command.start = HOVER_START_FRAME;
-  command.steer = driveMix.steer;
-  command.speed = driveMix.speed;
+  command.steer = driveMix.armed ? driveMix.steer : HOVER_COAST_COMMAND;
+  command.speed = driveMix.armed ? driveMix.speed : HOVER_COAST_COMMAND;
   command.checksum = command.start ^ command.steer ^ command.speed;
 
   hoverSerial.write(reinterpret_cast<uint8_t *>(&command), sizeof(command));

@@ -210,6 +210,15 @@ speed    = -1000..1000
 checksum = start ^ steer ^ speed
 ```
 
+Наше расширение для нормального disarm:
+
+```text
+steer = -32768
+speed = -32768
+```
+
+Это `COAST/OFF`: hoverboard переводит моторы в `OPEN_MODE`, ставит `enable=0`, PWM/MOSFET output отключается. Это лучше, чем слать `0/0`, потому что `0/0` у EFeru означает “моторы включены, цель нулевая”, и силовая часть может тихо пищать.
+
 ## Сцена 6. Web debug mode
 
 Нужен, когда пульт разряжен или ELRS не готов.
@@ -222,16 +231,16 @@ web arm    -> разрешает движение
 profile    -> low / mid / max
 speed      -> вперёд/назад
 steer      -> поворот
-STOP       -> speed=0, steer=0, web arm off
+STOP       -> COAST/OFF, web arm off
 source     -> rc/web
 ```
 
 Failsafe:
 
 ```text
-если браузер не шлёт heartbeat > 500 ms -> команда 0
-если web drive выключен -> команда 0
-если web arm off -> команда 0
+если браузер не шлёт heartbeat > 500 ms -> COAST/OFF
+если web drive выключен -> COAST/OFF
+если web arm off -> COAST/OFF
 ```
 
 ## Сцена 6.5. Motor Test
@@ -247,7 +256,7 @@ direction  -> forward / reverse
 left       -> левый мотор 0..100%
 right      -> правый мотор 0..100%
 both       -> оба мотора 0..100%
-ZERO       -> left=0, right=0, test arm off
+ZERO       -> COAST/OFF, test arm off
 ```
 
 Приоритет источников:

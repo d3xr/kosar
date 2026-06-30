@@ -36,8 +36,66 @@ diff --git a/Inc/config.h b/Inc/config.h
 +  #define CONTROL_SERIAL_USART3  0    // right sensor board cable. Number indicates priority for dual-input. Disable if I2C (nunchuk or lcd) is used! For Arduino control check the hoverSerial.ino
 +  #define FEEDBACK_SERIAL_USART3      // right sensor board cable, disable if I2C (nunchuk or lcd) is used!
 +  #define STEER_COEFFICIENT      16384 // 1.0f, keeps ESP left/right motor test symmetric
-- 
-+  
+ 
    // #define DUAL_INPUTS                 //  UART*(Primary) + SIDEBOARD(Auxiliary). Uncomment this to use Dual-inputs
    #define PRI_INPUT1             3, -1000, 0, 1000, 0     // TYPE, MIN, MID, MAX, DEADBAND. See INPUT FORMAT section
    #define PRI_INPUT2             3, -1000, 0, 1000, 0     // TYPE, MIN, MID, MAX, DEADBAND. See INPUT FORMAT section
+diff --git a/Src/main.c b/Src/main.c
+--- a/Src/main.c
++++ b/Src/main.c
+@@ -76,6 +76,7 @@
+ extern volatile uint8_t  timeoutFlgGen; // Timeout Flag for the General timeout (PPM, PWM, Nunchuk)
+ extern uint8_t timeoutFlgADC;           // Timeout Flag for for ADC Protection: 0 = OK, 1 = Problem detected (line disconnected or wrong ADC data)
+ extern uint8_t timeoutFlgSerial;        // Timeout Flag for Rx Serial command: 0 = OK, 1 = Problem detected (line disconnected or wrong Rx data)
++extern uint8_t serialCoast;             // Serial OFF command received: keep motor PWM disabled
+ 
+ extern volatile int pwml;               // global variable for pwm left. -1000 to 1000
+ extern volatile int pwmr;               // global variable for pwm right. -1000 to 1000
+@@ -257,6 +258,7 @@
+     #ifndef VARIANT_TRANSPOTTER
+       // ####### MOTOR ENABLING: Only if the initial input is very small (for SAFETY) #######
+       if (enable == 0 && !rtY_Left.z_errCode && !rtY_Right.z_errCode && 
++          !serialCoast &&
+           ABS(input1[inIdx].cmd) < 50 && ABS(input2[inIdx].cmd) < 50){
+         beepShort(6);                     // make 2 beeps indicating the motor enable
+         beepShort(4); HAL_Delay(100);
+diff --git a/Src/util.c b/Src/util.c
+--- a/Src/util.c
++++ b/Src/util.c
+@@ -103,6 +103,7 @@
+ int16_t  speedAvgAbs;                   // average measured speed in absolute
+ uint8_t  timeoutFlgADC    = 0;          // Timeout Flag for ADC Protection:    0 = OK, 1 = Problem detected (line disconnected or wrong ADC data)
+ uint8_t  timeoutFlgSerial = 0;          // Timeout Flag for Rx Serial command: 0 = OK, 1 = Problem detected (line disconnected or wrong Rx data)
++uint8_t  serialCoast      = 0;          // Serial OFF command received: keep motor PWM disabled
+ 
+ uint8_t  ctrlModReqRaw = CTRL_MOD_REQ;
+ uint8_t  ctrlModReq    = CTRL_MOD_REQ;  // Final control mode request 
+@@ -1053,6 +1054,14 @@
+ void readCommand(void) {
+     readInputRaw();
+ 
++    #if defined(CONTROL_SERIAL_USART2) || defined(CONTROL_SERIAL_USART3)
++    serialCoast = (input1[inIdx].raw == INT16_MIN && input2[inIdx].raw == INT16_MIN);
++    if (serialCoast) {
++      input1[inIdx].raw = 0;
++      input2[inIdx].raw = 0;
++    }
++    #endif
++
+     #if !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
+       calcInputCmd(&input1[inIdx], INPUT_MIN, INPUT_MAX);
+       #if !defined(VARIANT_SKATEBOARD)
+@@ -1064,6 +1073,13 @@
+ 
+     handleTimeout();
+ 
++    if (serialCoast) {
++      ctrlModReq = OPEN_MODE;
++      enable = 0;
++      input1[inIdx].cmd = 0;
++      input2[inIdx].cmd = 0;
++    }
++
+     #ifdef VARIANT_HOVERCAR
+     if (inIdx == CONTROL_ADC) {
+       brakePressed = (uint8_t)(input1[inIdx].cmd > 50);
