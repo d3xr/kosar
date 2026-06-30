@@ -17,15 +17,17 @@
 
 ## Текущий квест
 
-Ты разобрал гироскутер. Прошивальщик едет.
+Гироскутерная плата прошита через ST-Link. Сейчас задача не “собрать робота-косилку”. Сейчас задача: **колёса крутятся в воздухе от ESP/Web UI или ELRS-пульта и гарантированно стопятся**.
 
-Сейчас задача не “собрать робота-косилку”. Сейчас задача:
+Текущая архитектура:
 
-1. найти точки `GND / SWDIO / SWCLK`;
-2. прошить плату;
-3. заставить колёса крутиться в воздухе;
-4. подключить RC;
-5. убедиться, что при потере связи оно останавливается.
+```text
+RadioMaster Boxer / web debug
+  -> ESP32 TTGO LoRa32
+  -> UART 115200
+  -> hoverboard mainboard EFeru VARIANT_USART
+  -> два мотор-колеса
+```
 
 Нож Greenworks пока не существует. Он в другой серии.
 
@@ -43,16 +45,28 @@ brew install openocd stlink platformio
 firmware/upstream/hoverboard-firmware-hack-FOC
 ```
 
-Собран безопасный PWM-билд:
+Hoverboard-плата:
+
+- MCU: `GD32F103RCT6`.
+- SWD найден и припаян на гребёнку.
+- ST-Link проверил связь: `Cortex-M3 detected`, target halt OK.
+- Залита `VARIANT_USART`.
+- Правый sideboard-разъём выбран как UART3.
+
+ESP32-стенд:
+
+- `firmware/esp32-crsf-web`
+- Wi-Fi/web UI: `http://kosar.local/`
+- домашний Wi-Fi локально в ignored `wifi_local.h`;
+- CRSF вход ELRS: `GPIO16/17`;
+- hoverboard UART: `GPIO25/26`;
+- web debug control: можно рулить без пульта;
+- failsafe web heartbeat: 500 ms.
+
+Патчи с безопасным конфигом:
 
 ```bash
-firmware/upstream/hoverboard-firmware-hack-FOC/.pio/build/VARIANT_PWM/firmware.bin
-```
-
-Патч с “детским режимом” лежит тут:
-
-```bash
-firmware/patches/stage1-safe-pwm-config.patch
+firmware/patches/stage1-safe-usart3-config.patch
 ```
 
 ## Главный документ

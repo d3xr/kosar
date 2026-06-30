@@ -1,111 +1,119 @@
 # Гаражный runbook: оживляем гироскутер
 
-## Сцена 0. Что лежит на столе
+## Сцена 0. Где мы сейчас
 
 Есть:
 
 - разобранный гироскутер;
-- плата с `GD32F103RCT6` или очень похожим MCU;
+- плата `Yiyun/YK97`-класса с `GD32F103RCT6`;
 - два мотор-колеса;
 - родная батарея гироскутера;
-- Mac уже готов к сборке;
-- ST-Link едет.
+- ST-Link V2;
+- TTGO LoRa32 ESP32;
+- ELRS receiver;
+- RadioMaster Boxer, сейчас может быть разряжен;
+- веб-управление как запасной debug-driver.
 
 Цель: **колёса крутятся от пульта, пока висят в воздухе**.
 
-## Сцена 1. Пока ST-Link едет
+Нож Greenworks не подключать. Greenworks 48V не смешивать с hoverboard 10S.
 
-Сделай фото, без этого дальше будет гадание на дорожках:
+## Сцена 1. Что уже сделано
 
-1. плата целиком сверху;
-2. MCU крупно, чтобы читалась маркировка;
-3. все мелкие площадки рядом с MCU;
-4. разъём кнопки питания;
-5. два sideboard-разъёма;
-6. фазные провода моторов;
-7. тонкие Hall-провода моторов;
-8. батарея и её разъём.
+Hoverboard:
 
-Ничего пока не откусывать.
+- SWD-гребёнка припаяна.
+- ST-Link увидел плату:
+  ```text
+  Target voltage: 3.297196
+  Cortex-M3 r2p1 processor detected
+  target halted
+  ```
+- `VARIANT_USART` залит успешно.
 
-## Сцена 2. Что искать на плате
+ESP32:
 
-Для прошивки нужны три точки:
+- web UI работает на `http://kosar.local/`;
+- CRSF с ELRS receiver читается;
+- каналы видны в вебморде;
+- добавлен web debug control;
+- добавлена отправка EFeru serial-команд в hoverboard;
+- добавлено чтение hoverboard feedback.
+
+## Сцена 2. Пины и провода
+
+### SWD прошивка hoverboard
+
+На SWD-гребёнке платы:
 
 ```text
-GND
-SWDIO
-SWCLK
+3.3V   не подключать
+SWCLK  -> ST-Link SWCLK / TCK
+GND    -> ST-Link GND
+SWDIO  -> ST-Link SWDIO / TMS
 ```
 
-Иногда рядом есть:
+ST-Link питание не даёт:
 
 ```text
-3V3
-NRST
+3.3V -> не подключать
+5V   -> не подключать
+RST  -> пока не нужен
 ```
 
-`3V3` не подключаем. `NRST` пока не нужен.
+Плата питается от родной батареи. При прошивке держать кнопку питания.
 
-## Сцена 3. Как подключать ST-Link
+### ESP32 -> ELRS receiver
 
-Три провода:
-
-| ST-Link | Плата |
-|---|---|
-| `GND` | `GND` |
-| `SWDIO` | `SWDIO` |
-| `SWCLK` | `SWCLK` |
-
-Не подключать:
-
-- `3.3V` от ST-Link;
-- `5V` от ST-Link;
-- Greenworks 48V.
-
-Плата питается от родной батареи гироскутера.
-
-Во время прошивки держать кнопку питания. У этих плат часто логика такая: отпустил кнопку — плата решила “я устала” и выключилась.
-
-Паять навсегда не надо. Нормально временно припаять три тонких провода. Если есть pogo pins — вообще красиво.
-
-## Сцена 4. Команды
-
-Перейти в прошивку:
-
-```bash
-cd /Users/d3xr/Documents/Косарь/firmware/upstream/hoverboard-firmware-hack-FOC
+```text
+TTGO 5V/VIN -> ELRS 5V
+TTGO GND    -> ELRS GND
+TTGO GPIO16 -> ELRS TX
+TTGO GPIO17 -> ELRS RX, later telemetry
 ```
 
-Проверить, что билд собирается:
+### ESP32 -> hoverboard right sideboard
 
-```bash
-pio run -e VARIANT_PWM
+Правый sideboard = `USART3`.
+
+```text
+TTGO GPIO25 -> hoverboard PB11 / RX
+TTGO GPIO26 -> hoverboard PB10 / TX
+TTGO GND    -> hoverboard GND
 ```
 
-Когда ST-Link подключен и плата питается:
+`15V 200mA` с sideboard не использовать для ESP32.
 
-```bash
-openocd -f interface/stlink-v2.cfg -f target/stm32f1x.cfg -c init -c "reset halt" -c "stm32f1x unlock 0"
+### Питание ESP32 на борту
+
+Для стола:
+
+```text
+ESP от USB или powerbank
+hoverboard от родной батареи
+GND ESP и hoverboard общий
 ```
 
-Это стирает родную прошивку. Назад в “как было с завода” скорее всего не вернуться.
+Для борта:
 
-Потом прошивка:
-
-```bash
-pio run -e VARIANT_PWM -t upload
+```text
+10S battery -> buck 5V 2A/3A -> TTGO 5V/VIN + ELRS 5V
 ```
 
-Если PlatformIO начнёт вредничать:
+## Сцена 3. Hoverboard firmware
 
-```bash
-st-flash --reset write .pio/build/VARIANT_PWM/firmware.bin 0x8000000
+Используем `EFeru/hoverboard-firmware-hack-FOC`.
+
+Режим:
+
+```text
+VARIANT_USART
+FOC_CTRL + VLT_MODE
+right sideboard USART3
+baud 115200
 ```
 
-## Сцена 5. Конфиг сейчас
-
-Я уже сделал безопасный первый конфиг:
+Безопасные лимиты:
 
 ```c
 #define I_MOT_MAX       8
@@ -114,65 +122,127 @@ st-flash --reset write .pio/build/VARIANT_PWM/firmware.bin 0x8000000
 #define DEFAULT_RATE    160
 ```
 
-И в `VARIANT_PWM`:
-
-```c
-#define SPEED_COEFFICIENT 8192
-#define STEER_COEFFICIENT 8192
-```
-
-Перевод: едет медленно, газ мягкий, рулёжка не бешеная. Для первого “оно живое?” достаточно.
-
-## Сцена 6. RC-подключение
-
-Самый простой путь: ELRS-приёмник с PWM-выходами.
-
-EFeru ждёт:
+Патч:
 
 ```text
-CH1 = steering
-CH2 = speed
+firmware/patches/stage1-safe-usart3-config.patch
 ```
 
-На уровне MCU для правого sideboard-разъёма:
+Команды, если понадобится повторить:
+
+```bash
+cd /Users/d3xr/Documents/Косарь/firmware/upstream/hoverboard-firmware-hack-FOC
+
+openocd -f interface/stlink.cfg -f target/stm32f1x.cfg -c "init; reset halt; targets; exit"
+
+pio run -e VARIANT_USART -t upload
+```
+
+## Сцена 4. ESP32 firmware
+
+Проект:
 
 ```text
-PB10 = CH1
-PB11 = CH2
+firmware/esp32-crsf-web
 ```
 
-Но по цветам проводов не верим. Мультиметр — главный шаманский барабан.
+Что умеет:
 
-Что проверить перед подключением приёмника:
+- читает CRSF с ELRS receiver;
+- показывает каналы в вебморде;
+- хранит подписи каналов в browser `localStorage`;
+- считает `speed/steer`;
+- режет управление через `Arm`;
+- даёт профили `turtle/normal/full`;
+- шлёт hoverboard serial command;
+- читает hoverboard feedback;
+- даёт web debug control без пульта.
 
-- где настоящий `GND`;
-- нет ли на красном проводе sideboard-разъёма 12/15V;
-- приёмник питается от нормального 5V BEC/DC-DC, не от непонятного провода платы.
+Прошить:
 
-## Сцена 7. Настройка пульта
+```bash
+cd /Users/d3xr/Documents/Косарь/firmware/esp32-crsf-web
+pio run -t upload
+```
 
-Минимально:
+Веб:
 
-- CH1 steering: центр `1500us`, failsafe `1500us`;
-- CH2 speed: центр `1500us`, failsafe `1500us`;
-- PWM: 50 Hz или 100 Hz;
-- отдельный ARM-тумблер;
-- скорость лучше на пружинящую ось, не на нецентрирующийся газ.
+```text
+http://kosar.local/
 
-CH3 под газ не использовать, пока не проверен failsafe. У некоторых ELRS PWM RX CH3 при потере связи уходит не в центр, а вниз. Нам нужен стоп, не “поехали в закат”.
+fallback AP:
+Wi-Fi: Kosar-RC
+pass: kosar1234
+url: http://192.168.4.1/
+```
 
-## Сцена 8. Первый запуск
+## Сцена 5. Управление
+
+```text
+CH1 Roll  -> steer
+CH2 Pitch -> speed
+CH5 Arm   -> gate движения
+CH6 Mode  -> профиль отклика
+```
+
+Профили:
+
+```text
+turtle: max 100, accel 120/s, steer 180/s
+normal: max 240, accel 420/s, steer 520/s
+full:   max 420, accel 1200/s, steer 1200/s
+```
+
+`Throttle` не используем как газ: он не самоцентрируется.
+
+EFeru serial protocol:
+
+```text
+start    = 0xABCD
+steer    = -1000..1000
+speed    = -1000..1000
+checksum = start ^ steer ^ speed
+```
+
+## Сцена 6. Web debug mode
+
+Нужен, когда пульт разряжен или ELRS не готов.
+
+Веб-блок:
+
+```text
+web drive  -> включает web-source
+web arm    -> разрешает движение
+profile    -> turtle / normal / full
+speed      -> вперёд/назад
+steer      -> поворот
+STOP       -> speed=0, steer=0, web arm off
+source     -> rc/web
+```
+
+Failsafe:
+
+```text
+если браузер не шлёт heartbeat > 500 ms -> команда 0
+если web drive выключен -> команда 0
+если web arm off -> команда 0
+```
+
+## Сцена 7. Первый живой тест
 
 Порядок:
 
 1. колёса в воздухе;
-2. ножа нет;
-3. пульт включён;
-4. плата включена;
-5. маленький газ;
-6. проверка направлений;
-7. выключить пульт;
-8. колёса должны остановиться.
+2. hoverboard от родной батареи;
+3. ESP от USB или powerbank;
+4. общий GND между ESP и hoverboard;
+5. открыть `http://kosar.local/`;
+6. проверить `hoverboard OK`;
+7. `profile = turtle`;
+8. `web drive ON`;
+9. `web arm ON`;
+10. `speed = 5..10`;
+11. нажать `STOP`.
 
 Стоп-триггеры:
 
@@ -183,13 +253,46 @@ CH3 под газ не использовать, пока не проверен 
 
 Тогда питание вниз, паяльник в сторону, разбираем спокойно.
 
-## Что мне нужно от тебя сейчас
+## Сцена 8. Потом на косилку
 
-До приезда ST-Link:
+Не сразу в корпус Greenworks. Сначала отдельный приводной модуль:
 
-- фото платы сверху;
-- крупно MCU;
-- крупно места, где есть подписи `SWD`, `CLK`, `DIO`, `GND`, `3V3`;
-- модель ELRS-приёмника или фото приёмников.
+```text
+2 мотор-колеса
+рама/пластина
+hoverboard controller в боксе
+ESP + ELRS + buck в боксе
+родная hoverboard 10S battery
+механический kill switch
+```
 
-По этим фото я скажу: сюда GND, сюда SWDIO, сюда SWCLK, вот это не трогай.
+Потом крепим модуль к косилке. Нож не включать до отдельного safety-gate.
+
+## Сцена 9. Отложенные ништяки
+
+Напряжение батареи:
+
+- сейчас не блокирует первый запуск;
+- позже взять `Voltage Sensor Module DC 0-25V`;
+- перепаять верхний резистор `303` на `104`, чтобы 42V не убили ESP32;
+- выход `S` модуля вести на `TTGO GPIO35`;
+- потом это пойдёт в web UI и ELRS telemetry.
+
+Caddx Vista:
+
+- отдельная FPV-система;
+- не питать от ESP32;
+- нужна нормальная линия питания и обдув;
+- полезна как глаз для ручного RC-режима.
+
+Mini PC Gigabyte GB-BACE-3160:
+
+- норм как бортовой Linux-наблюдатель;
+- OpenCV, USB-вебка, запись, эксперименты;
+- не должен напрямую крутить моторы;
+- real-time safety остаётся на ESP32.
+
+Arduino:
+
+- на MVP не нужна;
+- может пригодиться позже как тупой IO/safety-модуль для датчиков.
