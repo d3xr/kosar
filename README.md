@@ -88,7 +88,7 @@ firmware/patches/stage1-safe-usart3-config.patch
 
 [apps/kosar-dashboard](apps/kosar-dashboard)
 
-Он рассчитан на `kosar.vyroslo.ru` / GitHub Pages и пока работает как read-only витрина с mock telemetry. Управление моторами наружу не выносится.
+Он рассчитан на `kosar.vyroslo.ru` на твоём Timeweb-хостинге и пока работает как read-only витрина с mock telemetry. Управление моторами наружу не выносится.
 
 Telemetry contract:
 
