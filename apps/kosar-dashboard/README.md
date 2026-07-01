@@ -19,19 +19,35 @@ http://127.0.0.1:8787/
 
 Папка `public/` самодостаточная: HTML, CSS, JS, изображения.
 
-Для Timeweb:
+Текущий live:
 
-1. Создать поддомен `kosar.vyroslo.ru`.
-2. Назначить ему отдельную папку на хостинге.
-3. Загрузить содержимое `apps/kosar-dashboard/public/` в эту папку.
-4. Проверить, что открывается `/index.html`, `/src/styles.css`, `/assets/kosar-hero-rustpunk.webp`.
+```text
+https://kosar.vyroslo.ru
+```
+
+Текущий серверный контур:
+
+```text
+DNS owner: self-hosted ns1.vyroslo.ru / ns2.vyroslo.ru
+A record: kosar.vyroslo.ru -> 77.95.206.196
+Web root: /var/www/kosar
+Nginx vhost: /etc/nginx/sites-available/kosar
+TLS: Let's Encrypt / certbot nginx
+```
+
+Для ручного деплоя:
+
+1. Загрузить содержимое `apps/kosar-dashboard/public/` в web root.
+2. Проверить, что открывается `/index.html`, `/src/styles.css`, `/assets/kosar-hero-rustpunk.webp`.
+3. Проверить HTTP -> HTTPS redirect.
+4. Проверить, что страница содержит ссылку на `https://github.com/d3xr/kosar`.
 
 Для nginx:
 
 ```nginx
 server {
     server_name kosar.vyroslo.ru;
-    root /var/www/kosar-dashboard/public;
+    root /var/www/kosar;
     index index.html;
 
     location / {
