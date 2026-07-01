@@ -2,6 +2,8 @@
 
 Практический стиль проекта: **Rustpunk Cozy / Косарьпанк**.
 
+Полная дизайн-система с токенами: `docs/design-system.md`.
+
 ## ДНК
 
 - salvagepunk: железо из доноров, стяжки, пайка, фанера, ржавчина;
@@ -12,17 +14,18 @@
 ## Цвета
 
 ```css
---bg:    #14100e;
---card:  #2a2320;
---line:  #4a4038;
---text:  #e8dcc8;
---muted: #9a8c7a;
---rust:  #c45508;
---ember: #e8801a;
---cyan:  #3fb6b2;
---ok:    #1bff80;
---warn:  #ffb641;
---crit:  #ff4b33;
+--k-bg-0:  #14100e;
+--k-bg-1:  #1f1a17;
+--k-bg-2:  #2a2320;
+--k-border:#4a4038;
+--k-text:  #e8dcc8;
+--k-text-dim:#9a8c7a;
+--k-rust:  #c45508;
+--k-ember: #e8801a;
+--k-cyan:  #3fb6b2;
+--k-ok:    #1bff80;
+--k-warn:  #ffb641;
+--k-crit:  #ff4b33;
 ```
 
 Смысл:

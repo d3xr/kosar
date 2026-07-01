@@ -13,6 +13,7 @@
 - `agent_docs/architecture.md` — текущая архитектура сайта, ESP32, ELRS и hoverboard controller.
 - `docs/garage-runbook.md` — практический runbook по стенду и железу.
 - `docs/telemetry-contract.md` — контракт телеметрии.
+- `docs/design-system.md` — токены, типографика и дизайн-система из Compass artifact.
 - `docs/visual-style.md` — визуальный код сайта.
 - `docs/landing-design-code.md` — правила лендинга и копирайта.
 
@@ -20,6 +21,7 @@
 
 - `agent_docs/adr/` — значимые решения, по одному файлу на решение.
 - `agent_docs/development-history/` — нетривиальные итерации, по одному файлу на итерацию.
+- `agent_docs/audits/` — проверки соответствия, ревью и отчёты.
 
 ## Гайды
 
