@@ -119,8 +119,8 @@
     </nav>
     <section id="top" class="hero__content">
       <p class="eyebrow">RC mower / hoverboard drive / ESP32</p>
-      <h1>Газонокосилка, которая сначала просто едет</h1>
-      <p class="lead">Берём бытовую косилку, донорский гироскутер, ELRS-пульт, ESP32 и собираем странную полезную тележку. Нож пока выключен. Панк жив, моторы под контролем.</p>
+      <h1>Газонокосилка из гаражного хлама</h1>
+      <p class="lead">Берём бытовую Greenworks, гироскутерный привод, ELRS-пульт и ESP32 и строим боевой RC-модуль: крутит точно, логирует стабильно, живёт локально.</p>
       <div class="actions">
         <a class="button button--hot" href="https://github.com/d3xr/kosar" target="_blank" rel="noreferrer">Скачать на GitHub</a>
         <a class="button" href="#cockpit">Смотреть cockpit</a>
@@ -129,7 +129,7 @@
         <span><b>Stage</b> RC bring-up</span>
         <span><b>Drive</b> hover UART</span>
         <span><b>Radio</b> ELRS / CRSF</span>
-        <span><b>Blade</b> physically off</span>
+        <span><b>Mode</b> garage RC</span>
       </div>
     </section>
   </header>
@@ -151,7 +151,7 @@
         </article>
         <article class="panel panel--warning">
           <h3>Safety</h3>
-          <p>Нож не подключён. Управление моторами остаётся локальным. Публичный сайт только показывает проект и telemetry/replay, а не становится интернет-пультом газа.</p>
+          <p>Система разделена: ESP32 держит логику управления локально, публичный сайт — только отображение состояния, телеметрии и истории билдов.</p>
         </article>
       </div>
     </section>
@@ -167,7 +167,7 @@
     <section class="section" id="cockpit">
       <div class="section__head">
         <p class="eyebrow">server dashboard</p>
-        <h2>Красивый софт живёт на сервере. ESP держит safety.</h2>
+        <h2>Красивый софт на сервере, управление — на ESP32.</h2>
         <p>Эта страница сейчас работает на mock/replay данных. Следующий слой: ESP32 будет слать read-only telemetry на local server, а публичный домен покажет историю и состояние без прямого управления моторами.</p>
       </div>
       <div class="cockpit">
@@ -226,14 +226,14 @@
     <section class="section artifact" id="mvp">
       <div class="section__head">
         <p class="eyebrow">mvp-артефакт</p>
-        <h2>Ховерборд как задний приводной мост, но без школьной доски</h2>
-        <p>Не CAD и не учебник. Это текущая идея сборки: Greenworks shell, hoverboard axle, ESP32, ELRS, UART, локальное управление и нож физически off.</p>
+        <h2>Ховерборд как задний приводной модуль на базе железа из гаража</h2>
+        <p>Не учебный чертёж. Это рабочая сборка для стенда и первой езды: Greenworks shell, hoverboard axle, ESP32, ELRS, UART, локальный контур управления.</p>
       </div>
       <figure class="artifact__frame">
         <img src="/assets/kosar-mvp-drive-greenpunk.webp" alt="Rustpunk MVP-арт: Greenworks shell, hoverboard axle, ESP32, ELRS, UART и локальное управление">
         <figcaption>
-          <b>Local control, blade off.</b>
-          <span>Картинка показывает намерение сборки и safety boundary, а не финальную механическую документацию.</span>
+          <b>Local control, local stack.</b>
+          <span>Собранный наглядный ориентир по компоновке и инженерному контуру управления.</span>
         </figcaption>
       </figure>
     </section>
