@@ -14,6 +14,8 @@
   <link rel="sitemap" type="application/xml" href="/sitemap.xml">
   <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt">
   <link rel="preload" as="image" href="/assets/kosar-hero-rustpunk.webp">
+  <link rel="me" href="https://t.me/shkaf50">
+  <link rel="me" href="https://github.com/d3xr">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -48,7 +50,11 @@
         "name": "Косарь",
         "description": "Гаражный RC-проект: газонокосилка Greenworks, гироскутерный привод, ESP32, ELRS, telemetry dashboard и build docs.",
         "inLanguage": "ru",
-        "image": "https://kosar.vyroslo.ru/assets/kosar-og-image.png"
+        "image": "https://kosar.vyroslo.ru/assets/kosar-og-image.png",
+        "sameAs": [
+          "https://github.com/d3xr/kosar",
+          "https://t.me/shkaf50"
+        ]
       },
       {
         "@type": "WebPage",
@@ -61,6 +67,9 @@
         },
         "about": {
           "@id": "https://github.com/d3xr/kosar#source"
+        },
+        "creator": {
+          "@id": "https://kosar.vyroslo.ru/#iskander"
         },
         "primaryImageOfPage": {
           "@type": "ImageObject",
@@ -79,6 +88,16 @@
         "runtimePlatform": ["ESP32", "F103 hoverboard controller"],
         "isAccessibleForFree": true,
         "description": "Firmware, static dashboard, wiring notes and build documentation for a garage RC mower project."
+      },
+      {
+        "@type": "Person",
+        "@id": "https://kosar.vyroslo.ru/#iskander",
+        "name": "Искандер",
+        "alternateName": "d3xr",
+        "sameAs": [
+          "https://github.com/d3xr",
+          "https://t.me/shkaf50"
+        ]
       }
     ]
   }
@@ -94,6 +113,7 @@
         <a href="#story">История</a>
         <a href="#cockpit">Dashboard</a>
         <a href="#build">Собрать</a>
+        <a href="https://t.me/shkaf50" target="_blank" rel="me noreferrer">Шкаф</a>
         <a href="https://github.com/d3xr/kosar" target="_blank" rel="noreferrer">GitHub</a>
       </div>
     </nav>
@@ -203,12 +223,19 @@
       </div>
     </section>
 
-    <section class="section schematic">
+    <section class="section artifact" id="mvp">
       <div class="section__head">
-        <p class="eyebrow">mvp-схема</p>
-        <h2>Ховерборд как задний приводной мост</h2>
+        <p class="eyebrow">mvp-артефакт</p>
+        <h2>Ховерборд как задний приводной мост, но без школьной доски</h2>
+        <p>Не CAD и не учебник. Это текущая идея сборки: Greenworks shell, hoverboard axle, ESP32, ELRS, UART, локальное управление и нож физически off.</p>
       </div>
-      <img src="/mvp-greenworks-hover-drive.svg" alt="MVP-схема Greenworks + hoverboard drive">
+      <figure class="artifact__frame">
+        <img src="/assets/kosar-mvp-drive-art.webp" alt="Rustpunk MVP-арт: Greenworks shell, hoverboard axle, ESP32, ELRS, UART и локальное управление">
+        <figcaption>
+          <b>Local control, blade off.</b>
+          <span>Картинка показывает намерение сборки и safety boundary, а не финальную механическую документацию.</span>
+        </figcaption>
+      </figure>
     </section>
 
     <section class="section repo">
@@ -225,11 +252,25 @@ pio run</code></pre>
         </div>
       </div>
     </section>
+
+    <section class="section credits" id="credits">
+      <div class="credits__inner">
+        <p class="eyebrow">credits</p>
+        <h2>Собирает Искандер, документирует Косарь, живёт в Шкафу.</h2>
+        <p>Это build-in-public проект: железо, прошивка, удачные решения, тупики, дымные гипотезы и честные разборы остаются видимыми.</p>
+        <div class="credits__links" aria-label="Ссылки проекта">
+          <a href="https://t.me/shkaf50" target="_blank" rel="me noreferrer">Telegram: Шкаф</a>
+          <a href="https://github.com/d3xr/kosar" target="_blank" rel="noreferrer">GitHub: d3xr/kosar</a>
+          <a href="https://kosar.vyroslo.ru/" aria-current="page">kosar.vyroslo.ru</a>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
     <span>Косарь / built from scrap, failsafe under test</span>
-    <span>Public site: read-only. Motor control: local only.</span>
+    <span>By Искандер / d3xr + Codex as garage copilot</span>
+    <span><a href="https://t.me/shkaf50" target="_blank" rel="me noreferrer">Шкаф с недоделками</a></span>
   </footer>
 
   <script src="/src/app.js"></script>

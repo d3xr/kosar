@@ -55,5 +55,6 @@ apps/kosar-dashboard/public/assets/
 - `kosar-build-story.webp` — гаражная история;
 - `kosar-dashboard-cockpit.webp` — telemetry cockpit;
 - `kosar-hardware-closeup.webp` — железо и проводка.
+- `kosar-mvp-drive-art.webp` — MVP drive module как rustpunk artifact вместо школьной схемы.
 
 PNG-исходники оставлены рядом как source-grade assets.

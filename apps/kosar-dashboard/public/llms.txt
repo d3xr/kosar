@@ -4,6 +4,7 @@
 
 Canonical site: https://kosar.vyroslo.ru/
 Source repository: https://github.com/d3xr/kosar
+Build-in-public channel: https://t.me/shkaf50
 
 ## What this site contains
 
@@ -11,6 +12,7 @@ Source repository: https://github.com/d3xr/kosar
 - Read-only dashboard mock/replay for telemetry and UI direction.
 - Links to firmware, wiring notes, runbooks and mechanical MVP docs in the GitHub repository.
 - Safety notes: the blade is physically disconnected during RC bring-up, and the public site does not provide motor control.
+- Credits and project diary link: Telegram channel "Шкаф с недоделками" at https://t.me/shkaf50.
 
 ## Key project files
 

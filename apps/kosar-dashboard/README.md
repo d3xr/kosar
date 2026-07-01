@@ -55,6 +55,7 @@ SEO/social/GEO минимум:
 /sitemap.xml
 /llms.txt
 /assets/kosar-og-image.png
+/assets/kosar-mvp-drive-art.webp
 ```
 
 В `index.html` должны быть canonical, OG, Twitter Card и JSON-LD. Не добавлять metadata для API/MCP/OAuth/commerce, пока таких публичных интерфейсов реально нет.
@@ -66,6 +67,10 @@ server {
     server_name kosar.vyroslo.ru;
     root /var/www/kosar;
     index index.html;
+
+    location = /mvp-greenworks-hover-drive.svg {
+        return 410;
+    }
 
     location = /site.webmanifest {
         types { application/manifest+json webmanifest; }

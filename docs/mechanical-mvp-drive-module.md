@@ -17,9 +17,9 @@
 - Нож Greenworks физически отключён.
 - Greenworks 48V не смешивать с hoverboard 10S.
 
-Схема:
+Визуальный MVP-артефакт на лендинге:
 
-- `../mvp-greenworks-hover-drive.svg`
+- `apps/kosar-dashboard/public/assets/kosar-mvp-drive-art.webp`
 
 ## Почему не отдельные мотор-колёса
 
