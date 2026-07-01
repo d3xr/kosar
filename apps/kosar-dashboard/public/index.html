@@ -3,14 +3,86 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Косарь — гаражный RC-проект: газонокосилка, гироскутерные моторы, ESP32, ELRS и честный rustpunk cozy dashboard.">
-  <meta property="og:title" content="Косарь — RC mower из говна и палок">
-  <meta property="og:description" content="Greenworks shell, hoverboard drive, ESP32, ELRS, UART, telemetry, punk build docs.">
-  <meta property="og:image" content="/assets/kosar-hero-rustpunk.png">
+  <meta name="description" content="Косарь - гаражный RC-проект: газонокосилка Greenworks, гироскутерный привод, ESP32, ELRS, telemetry dashboard и build docs.">
+  <meta name="author" content="Искандер / d3xr">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="theme-color" content="#f0b33f">
+  <link rel="canonical" href="https://kosar.vyroslo.ru/">
+  <link rel="alternate" hreflang="ru" href="https://kosar.vyroslo.ru/">
+  <link rel="alternate" hreflang="x-default" href="https://kosar.vyroslo.ru/">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml">
+  <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt">
+  <link rel="preload" as="image" href="/assets/kosar-hero-rustpunk.webp">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="Косарь">
+  <meta property="og:title" content="Косарь - RC-газонокосилка на ESP32, ELRS и гироскутере">
+  <meta property="og:description" content="Greenworks shell, hoverboard drive, ESP32, ELRS, UART telemetry и build docs для гаражного RC mower проекта.">
+  <meta property="og:url" content="https://kosar.vyroslo.ru/">
+  <meta property="og:site_name" content="Косарь">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:image" content="https://kosar.vyroslo.ru/assets/kosar-og-image.png">
+  <meta property="og:image:secure_url" content="https://kosar.vyroslo.ru/assets/kosar-og-image.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Косарь - rustpunk RC-газонокосилка на базе Greenworks, ESP32 и гироскутерного привода">
   <meta property="og:type" content="website">
-  <link rel="icon" href="data:,">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Косарь - RC-газонокосилка на ESP32 и ELRS">
+  <meta name="twitter:description" content="Гаражный RC mower build: Greenworks shell, hoverboard motors, ESP32, ELRS, telemetry dashboard и документация на GitHub.">
+  <meta name="twitter:image" content="https://kosar.vyroslo.ru/assets/kosar-og-image.png">
+  <meta name="twitter:image:alt" content="Косарь - rustpunk RC-газонокосилка на базе Greenworks, ESP32 и гироскутерного привода">
   <link rel="stylesheet" href="/src/styles.css">
-  <title>Косарь — Rustpunk RC Mower</title>
+  <title>Косарь - RC-газонокосилка на ESP32, ELRS и гироскутере</title>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://kosar.vyroslo.ru/#website",
+        "url": "https://kosar.vyroslo.ru/",
+        "name": "Косарь",
+        "description": "Гаражный RC-проект: газонокосилка Greenworks, гироскутерный привод, ESP32, ELRS, telemetry dashboard и build docs.",
+        "inLanguage": "ru",
+        "image": "https://kosar.vyroslo.ru/assets/kosar-og-image.png"
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://kosar.vyroslo.ru/#webpage",
+        "url": "https://kosar.vyroslo.ru/",
+        "name": "Косарь - RC-газонокосилка на ESP32, ELRS и гироскутере",
+        "description": "Лендинг и read-only dashboard гаражного RC mower проекта с прошивкой, схемами и runbook на GitHub.",
+        "isPartOf": {
+          "@id": "https://kosar.vyroslo.ru/#website"
+        },
+        "about": {
+          "@id": "https://github.com/d3xr/kosar#source"
+        },
+        "primaryImageOfPage": {
+          "@type": "ImageObject",
+          "url": "https://kosar.vyroslo.ru/assets/kosar-og-image.png",
+          "width": 1200,
+          "height": 630
+        },
+        "inLanguage": "ru"
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "@id": "https://github.com/d3xr/kosar#source",
+        "name": "Kosar RC mower firmware and build docs",
+        "codeRepository": "https://github.com/d3xr/kosar",
+        "programmingLanguage": ["C++", "JavaScript", "HTML", "CSS"],
+        "runtimePlatform": ["ESP32", "F103 hoverboard controller"],
+        "isAccessibleForFree": true,
+        "description": "Firmware, static dashboard, wiring notes and build documentation for a garage RC mower project."
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <header class="hero">
@@ -51,7 +123,7 @@
       <div class="story-grid">
         <article class="panel">
           <h3>Зачем</h3>
-          <p>Сначала нужен не автономный убийца травы, а понятная RC-платформа: колёса крутятся, стоп работает, пульт живой, логи видны, дым не выходит.</p>
+          <p>Сначала нужен не автономный убийца травы, а понятная RC-платформа: колёса крутятся на стенде, стоп и failsafe проверяются, пульт живой, логи видны, дым не выходит.</p>
         </article>
         <article class="panel">
           <h3>Из чего</h3>
@@ -156,7 +228,7 @@ pio run</code></pre>
   </main>
 
   <footer class="footer">
-    <span>Косарь / built from scrap, guarded by failsafe</span>
+    <span>Косарь / built from scrap, failsafe under test</span>
     <span>Public site: read-only. Motor control: local only.</span>
   </footer>
 

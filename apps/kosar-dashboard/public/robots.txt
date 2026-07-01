@@ -1,0 +1,34 @@
+User-agent: *
+Allow: /
+
+# Public discovery policy for the read-only project site:
+# search, AI answer fetchers, and training crawlers are not blocked at this stage.
+# The site does not expose public motor-control APIs or private hardware secrets.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: YandexAdditionalBot
+Allow: /
+
+User-agent: YandexAdditional
+Allow: /
+
+Sitemap: https://kosar.vyroslo.ru/sitemap.xml

@@ -42,6 +42,23 @@ TLS: Let's Encrypt / certbot nginx
 3. Проверить HTTP -> HTTPS redirect.
 4. Проверить, что страница содержит ссылку на `https://github.com/d3xr/kosar`.
 
+SEO/social/GEO минимум:
+
+```text
+/favicon.svg
+/favicon.ico
+/apple-touch-icon.png
+/icon-192.png
+/icon-512.png
+/site.webmanifest
+/robots.txt
+/sitemap.xml
+/llms.txt
+/assets/kosar-og-image.png
+```
+
+В `index.html` должны быть canonical, OG, Twitter Card и JSON-LD. Не добавлять metadata для API/MCP/OAuth/commerce, пока таких публичных интерфейсов реально нет.
+
 Для nginx:
 
 ```nginx
@@ -49,6 +66,11 @@ server {
     server_name kosar.vyroslo.ru;
     root /var/www/kosar;
     index index.html;
+
+    location = /site.webmanifest {
+        types { application/manifest+json webmanifest; }
+        try_files $uri =404;
+    }
 
     location / {
         try_files $uri $uri/ /index.html;
