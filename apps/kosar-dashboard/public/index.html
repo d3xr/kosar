@@ -146,15 +146,15 @@
       <div class="story-grid">
         <article class="panel">
           <h3>Зачем</h3>
-          <p>Нужна не демо-машина для фото, а рабочая платформа: колёса крутятся на стенде, руль слушается, тянет прямо и не уезжает в хаос.</p>
+          <p>Обычные роботы-косилки слишком приличные: покупаешь коробку и надеешься, что она сама всё поймёт. Косарь — обратная история: берём понятное железо, вскрываем кишки и собираем машину, которую можно чинить, прошивать и доучивать.</p>
         </article>
         <article class="panel">
           <h3>Из чего</h3>
           <p>Корпус Greenworks, 10-дюймовые мотор-колёса, YK97/GD32F103, TTGO ESP32, RadioMaster Boxer ELRS, потом Caddx Vista для кадра.</p>
         </article>
         <article class="panel panel--boundary">
-          <h3>Граница</h3>
-          <p>Управляющая логика внутри ESP32, публичный сайт показывает каналы, состояние и историю. Нет web-команд на моторы.</p>
+          <h3>Почему так</h3>
+          <p>Ховерборд уже умеет крутить два мощных колеса, ESP32 дружит с вебом и UART, ELRS даёт нормальный радиоканал. Вместо “купить готовое” получается конструктор с характером.</p>
         </article>
       </div>
     </section>
@@ -210,35 +210,42 @@
     <section class="section build" id="build">
       <div class="section__head">
         <p class="eyebrow">собрать самому</p>
-        <h2>Путь повторения: стенд, затем корпус, затем улица.</h2>
+        <h2>Что нужно, чтобы собрать робота-газонокосилку</h2>
       </div>
       <div class="build__grid">
         <div class="build__image">
           <img src="/assets/kosar-hardware-closeup.webp" alt="Электроника и проводка Косаря">
         </div>
         <div class="steps">
-          <div class="step"><b>01</b><span>Прошить hoverboard controller через ST-Link: `VARIANT_USART`.</span></div>
-          <div class="step"><b>02</b><span>Подключить ESP32 к ELRS-рецептору и UART hoverboard sideboard.</span></div>
-          <div class="step"><b>03</b><span>Проверить `kosar.local`: Channels, Motors, Hover, Logs, Network.</span></div>
-          <div class="step"><b>04</b><span>Поднять колёса в воздух и тянуть left/right/both на 5–10%.</span></div>
-          <div class="step"><b>05</b><span>После контрольных логов и проверки контроля тянуть модуль в корпус.</span></div>
+          <div class="step"><b>01</b><span>Газонокосилка-донор: корпус, дека, место под батарею и будущую механику. Сейчас база — Greenworks.</span></div>
+          <div class="step"><b>02</b><span>Ховерборд с барахолки: два мотор-колеса и совместимая плата, которую можно прошить под UART.</span></div>
+          <div class="step"><b>03</b><span>ESP32: мост между пультом, веб-мордой, логами и платой ховерборда. TTGO уже в деле.</span></div>
+          <div class="step"><b>04</b><span>ELRS-радио: нормальный пульт, приёмник CRSF и привычная модель управления как у RC/FPV.</span></div>
+          <div class="step"><b>05</b><span>Питание, крепёж, провода, ST-Link и терпение: всё скучное, без чего панк не едет дальше стола.</span></div>
         </div>
       </div>
     </section>
 
-    <section class="section artifact" id="mvp">
+    <section class="section concept" id="mvp">
       <div class="section__head">
-        <p class="eyebrow">mvp-артефакт</p>
-        <h2>Площадка для первого рывка на железном подвесе</h2>
-        <p>Не учебный чертёж, а рабочий контур для стенда и первых километров: Greenworks shell, hoverboard axle, ESP32, ELRS, UART.</p>
+        <p class="eyebrow">концепция</p>
+        <h2>Ржавый уют вместо пластиковой магии</h2>
+        <p>Косарь выглядит как штука, которую собрали вечером в мастерской, но внутри у неё нормальная архитектура: радио, контроллер, привод, телеметрия и документация.</p>
       </div>
-      <figure class="artifact__frame">
-        <img src="/assets/kosar-mvp-drive-greenpunk.webp" alt="Rustpunk MVP-арт: Greenworks shell, hoverboard axle, ESP32, ELRS, UART и локальное управление">
-        <figcaption>
-          <b>Контур в железе, не в облаке.</b>
-          <span>Прямой ориентир по компоновке, проводам и тому, как эта штука едет.</span>
-        </figcaption>
-      </figure>
+      <div class="story-grid">
+        <article class="panel">
+          <h3>Эстетика</h3>
+          <p>Rustpunk Cozy: ржавчина, янтарный свет, циановые индикаторы, фанера, стяжки, зелёный текстолит и ощущение, что техника живая, а не вылезла из презентации.</p>
+        </article>
+        <article class="panel">
+          <h3>Идея</h3>
+          <p>Не прятать железо, а показывать его. Пусть видно, откуда идёт питание, куда уходит UART и почему моторы слушаются именно эту плату.</p>
+        </article>
+        <article class="panel">
+          <h3>Финал</h3>
+          <p>Сначала RC-платформа, потом FPV-глаз, потом датчики, потом автономка. Не одним прыжком в “умную косилку”, а слоями, где каждый слой можно проверить руками.</p>
+        </article>
+      </div>
     </section>
 
     <section class="section repo">
