@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Косарь — гаражный RC-проект: газонокосилка, гироскутерные моторы, ESP32, ELRS и честный rustpunk cozy dashboard.">
+  <meta property="og:title" content="Косарь — RC mower из говна и палок">
+  <meta property="og:description" content="Greenworks shell, hoverboard drive, ESP32, ELRS, UART, telemetry, punk build docs.">
+  <meta property="og:image" content="/assets/kosar-hero-rustpunk.png">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/src/styles.css">
+  <title>Косарь — Rustpunk RC Mower</title>
+</head>
+<body>
+  <header class="hero">
+    <img class="hero__image" src="/assets/kosar-hero-rustpunk.webp" alt="Самодельная RC-косилка в rustpunk cozy стиле">
+    <div class="noise"></div>
+    <nav class="nav" aria-label="Главная навигация">
+      <a class="brand" href="#top">КОСАРЬ</a>
+      <div class="nav__links">
+        <a href="#story">История</a>
+        <a href="#cockpit">Dashboard</a>
+        <a href="#build">Собрать</a>
+        <a href="https://github.com/d3xr/kosar" target="_blank" rel="noreferrer">GitHub</a>
+      </div>
+    </nav>
+    <section id="top" class="hero__content">
+      <p class="eyebrow">RC mower / hoverboard drive / ESP32</p>
+      <h1>Газонокосилка, которая сначала просто едет</h1>
+      <p class="lead">Берём бытовую косилку, донорский гироскутер, ELRS-пульт, ESP32 и собираем странную полезную тележку. Нож пока выключен. Панк жив, моторы под контролем.</p>
+      <div class="actions">
+        <a class="button button--hot" href="https://github.com/d3xr/kosar" target="_blank" rel="noreferrer">Скачать на GitHub</a>
+        <a class="button" href="#cockpit">Смотреть cockpit</a>
+      </div>
+      <div class="status-strip" aria-label="Статусы проекта">
+        <span><b>Stage</b> RC bring-up</span>
+        <span><b>Drive</b> hover UART</span>
+        <span><b>Radio</b> ELRS / CRSF</span>
+        <span><b>Blade</b> physically off</span>
+      </div>
+    </section>
+  </header>
+
+  <main>
+    <section class="section intro" id="story">
+      <div class="section__head">
+        <p class="eyebrow">история проекта</p>
+        <h2>Не робот из презентации. Железо из мастерской.</h2>
+      </div>
+      <div class="story-grid">
+        <article class="panel">
+          <h3>Зачем</h3>
+          <p>Сначала нужен не автономный убийца травы, а понятная RC-платформа: колёса крутятся, стоп работает, пульт живой, логи видны, дым не выходит.</p>
+        </article>
+        <article class="panel">
+          <h3>Из чего</h3>
+          <p>Greenworks shell, 10-дюймовые мотор-колёса гироскутера, YK97/GD32F103 controller, TTGO ESP32, RadioMaster Boxer ELRS, Caddx Vista позже как FPV-глаз.</p>
+        </article>
+        <article class="panel panel--warning">
+          <h3>Safety</h3>
+          <p>Нож не подключён. Управление моторами остаётся локальным. Публичный сайт только показывает проект и telemetry/replay, а не становится интернет-пультом газа.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="image-band">
+      <img src="/assets/kosar-build-story.webp" alt="Гаражная сборка Косаря">
+      <div class="image-band__caption">
+        <b>Rustpunk Cozy</b>
+        <span>тёплый янтарь, циан-патина, провода, стяжки, фанера, UART и вера в то, что оно поедет</span>
+      </div>
+    </section>
+
+    <section class="section" id="cockpit">
+      <div class="section__head">
+        <p class="eyebrow">server dashboard</p>
+        <h2>Красивый софт живёт на сервере. ESP держит safety.</h2>
+        <p>Эта страница сейчас работает на mock/replay данных. Следующий слой: ESP32 будет слать read-only telemetry на local server, а публичный домен покажет историю и состояние без прямого управления моторами.</p>
+      </div>
+      <div class="cockpit">
+        <div class="telemetry">
+          <div class="telemetry__top">
+            <span class="chip chip--ok">CRSF OK</span>
+            <span class="chip chip--ok">HOVER OK</span>
+            <span class="chip chip--warn">WEB READ ONLY</span>
+          </div>
+          <div class="gauges">
+            <div class="gauge">
+              <b id="speed">0</b>
+              <span>speed cmd</span>
+            </div>
+            <div class="gauge">
+              <b id="steer">0</b>
+              <span>steer cmd</span>
+            </div>
+            <div class="gauge">
+              <b id="battery">38.4</b>
+              <span>battery V</span>
+            </div>
+            <div class="gauge">
+              <b id="heap">181</b>
+              <span>heap KB</span>
+            </div>
+          </div>
+          <div class="bars" id="bars" aria-label="CRSF channel bars"></div>
+          <div class="terminal" id="terminal" aria-label="event log"></div>
+        </div>
+        <figure class="cockpit__art">
+          <img src="/assets/kosar-dashboard-cockpit.webp" alt="Rustpunk telemetry cockpit">
+        </figure>
+      </div>
+    </section>
+
+    <section class="section build" id="build">
+      <div class="section__head">
+        <p class="eyebrow">собрать самому</p>
+        <h2>Путь повторения: сначала стенд, потом тележка, потом косилка.</h2>
+      </div>
+      <div class="build__grid">
+        <div class="build__image">
+          <img src="/assets/kosar-hardware-closeup.webp" alt="Электроника и проводка Косаря">
+        </div>
+        <div class="steps">
+          <div class="step"><b>01</b><span>Прошить hoverboard controller через ST-Link и `VARIANT_USART`.</span></div>
+          <div class="step"><b>02</b><span>Подключить ESP32 к ELRS receiver и UART hoverboard sideboard.</span></div>
+          <div class="step"><b>03</b><span>Проверить `kosar.local`: Channels, Motors, Hover, Logs, Network.</span></div>
+          <div class="step"><b>04</b><span>Поднять колёса в воздух, тестировать left/right/both на 5–10%.</span></div>
+          <div class="step"><b>05</b><span>Только после стопов и логов крепить приводной модуль к железу.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section schematic">
+      <div class="section__head">
+        <p class="eyebrow">mvp-схема</p>
+        <h2>Ховерборд как задний приводной мост</h2>
+      </div>
+      <img src="/mvp-greenworks-hover-drive.svg" alt="MVP-схема Greenworks + hoverboard drive">
+    </section>
+
+    <section class="section repo">
+      <div class="repo__panel">
+        <p class="eyebrow">open build</p>
+        <h2>Прошивка, патчи и runbook лежат на GitHub</h2>
+        <p>Внутри: ESP32 web firmware, hoverboard FOC patch, гаражный runbook, wiring notes, dashboard landing и будущий telemetry contract.</p>
+        <pre><code>git clone https://github.com/d3xr/kosar.git
+cd kosar/firmware/esp32-crsf-web
+pio run</code></pre>
+        <div class="actions">
+          <a class="button button--hot" href="https://github.com/d3xr/kosar" target="_blank" rel="noreferrer">Открыть GitHub</a>
+          <a class="button" href="https://github.com/d3xr/kosar/archive/refs/heads/main.zip">Скачать ZIP</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Косарь / built from scrap, guarded by failsafe</span>
+    <span>Public site: read-only. Motor control: local only.</span>
+  </footer>
+
+  <script src="/src/app.js"></script>
+</body>
+</html>

@@ -82,6 +82,18 @@ firmware/patches/stage1-safe-usart3-config.patch
 
 [docs/mechanical-mvp-drive-module.md](docs/mechanical-mvp-drive-module.md)
 
+## Публичный лендинг и dashboard
+
+Статический Rustpunk Cozy лендинг лежит тут:
+
+[apps/kosar-dashboard](apps/kosar-dashboard)
+
+Он рассчитан на `kosar.vyroslo.ru` / GitHub Pages и пока работает как read-only витрина с mock telemetry. Управление моторами наружу не выносится.
+
+Telemetry contract:
+
+[docs/telemetry-contract.md](docs/telemetry-contract.md)
+
 ## Короткое правило
 
 Если непонятно, куда паять, не паять. Сначала фото платы крупно, потом разметка, потом паяльник.
