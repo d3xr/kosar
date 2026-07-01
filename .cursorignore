@@ -1,0 +1,7 @@
+# Secrets and local environment
+.env
+.env.*
+firmware/esp32-crsf-web/src/wifi_local.h
+
+# Safe template
+!.env.example

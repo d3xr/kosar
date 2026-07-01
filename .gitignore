@@ -1,17 +1,51 @@
+# OS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+*~
+
+# IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# Secrets and local config
 .env
 .env.*
 !.env.example
+firmware/esp32-crsf-web/src/wifi_local.h
+
+# Logs and temp
 *.log
+*.log*
 logs/
 tmp/
-firmware/upstream/
-firmware/esp32-crsf-web/src/wifi_local.h
+temp/
+
+# Dependencies and builds
+node_modules/
+dist/
+build/
 .pio/
+firmware/upstream/
 *.bin
 *.elf
 *.hex
 *.map
-node_modules/
-dist/
-build/
