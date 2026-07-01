@@ -19,7 +19,7 @@
 
 Визуальный MVP-артефакт на лендинге:
 
-- `apps/kosar-dashboard/public/assets/kosar-mvp-drive-art.webp`
+- `apps/kosar-dashboard/public/assets/kosar-mvp-drive-greenpunk.webp`
 
 ## Почему не отдельные мотор-колёса
 

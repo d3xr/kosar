@@ -55,7 +55,7 @@ SEO/social/GEO минимум:
 /sitemap.xml
 /llms.txt
 /assets/kosar-og-image.png
-/assets/kosar-mvp-drive-art.webp
+/assets/kosar-mvp-drive-greenpunk.webp
 ```
 
 В `index.html` должны быть canonical, OG, Twitter Card и JSON-LD. Не добавлять metadata для API/MCP/OAuth/commerce, пока таких публичных интерфейсов реально нет.
