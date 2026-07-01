@@ -143,15 +143,15 @@
       <div class="story-grid">
         <article class="panel">
           <h3>Зачем</h3>
-          <p>Сначала нужен не автономный убийца травы, а понятная RC-платформа: колёса крутятся на стенде, стоп и failsafe проверяются, пульт живой, логи видны, дым не выходит.</p>
+          <p>Нужна не демо-машина для фото, а рабочая платформа: колёса крутятся на стенде, руль слушается, тянет прямо и не уезжает в хаос.</p>
         </article>
         <article class="panel">
           <h3>Из чего</h3>
-          <p>Greenworks shell, 10-дюймовые мотор-колёса гироскутера, YK97/GD32F103 controller, TTGO ESP32, RadioMaster Boxer ELRS, Caddx Vista позже как FPV-глаз.</p>
+          <p>Корпус Greenworks, 10-дюймовые мотор-колёса, YK97/GD32F103, TTGO ESP32, RadioMaster Boxer ELRS, потом Caddx Vista для кадра.</p>
         </article>
         <article class="panel panel--warning">
-          <h3>Safety</h3>
-          <p>Система разделена: ESP32 держит логику управления локально, публичный сайт — только отображение состояния, телеметрии и истории билдов.</p>
+          <h3>Граница</h3>
+          <p>Управляющая логика внутри ESP32, публичный сайт показывает каналы, состояние и историю. Нет web-команд на моторы.</p>
         </article>
       </div>
     </section>
@@ -168,7 +168,7 @@
       <div class="section__head">
         <p class="eyebrow">server dashboard</p>
         <h2>Красивый софт на сервере, управление — на ESP32.</h2>
-        <p>Эта страница сейчас работает на mock/replay данных. Следующий слой: ESP32 будет слать read-only telemetry на local server, а публичный домен покажет историю и состояние без прямого управления моторами.</p>
+        <p>Сейчас это mock/replay. Следующий слой: ESP32 шлёт телеметрию на локальный сервер, сайт держит мониторинг и хронику, а управление остаётся в железном контуре.</p>
       </div>
       <div class="cockpit">
         <div class="telemetry">
@@ -207,18 +207,18 @@
     <section class="section build" id="build">
       <div class="section__head">
         <p class="eyebrow">собрать самому</p>
-        <h2>Путь повторения: сначала стенд, потом тележка, потом косилка.</h2>
+        <h2>Путь повторения: стенд, затем корпус, затем улица.</h2>
       </div>
       <div class="build__grid">
         <div class="build__image">
           <img src="/assets/kosar-hardware-closeup.webp" alt="Электроника и проводка Косаря">
         </div>
         <div class="steps">
-          <div class="step"><b>01</b><span>Прошить hoverboard controller через ST-Link и `VARIANT_USART`.</span></div>
-          <div class="step"><b>02</b><span>Подключить ESP32 к ELRS receiver и UART hoverboard sideboard.</span></div>
+          <div class="step"><b>01</b><span>Прошить hoverboard controller через ST-Link: `VARIANT_USART`.</span></div>
+          <div class="step"><b>02</b><span>Подключить ESP32 к ELRS-рецептору и UART hoverboard sideboard.</span></div>
           <div class="step"><b>03</b><span>Проверить `kosar.local`: Channels, Motors, Hover, Logs, Network.</span></div>
-          <div class="step"><b>04</b><span>Поднять колёса в воздух, тестировать left/right/both на 5–10%.</span></div>
-          <div class="step"><b>05</b><span>Только после стопов и логов крепить приводной модуль к железу.</span></div>
+          <div class="step"><b>04</b><span>Поднять колёса в воздух и тянуть left/right/both на 5–10%.</span></div>
+          <div class="step"><b>05</b><span>После контрольных логов и проверки контроля тянуть модуль в корпус.</span></div>
         </div>
       </div>
     </section>
@@ -226,14 +226,14 @@
     <section class="section artifact" id="mvp">
       <div class="section__head">
         <p class="eyebrow">mvp-артефакт</p>
-        <h2>Ховерборд как задний приводной модуль на базе железа из гаража</h2>
-        <p>Не учебный чертёж. Это рабочая сборка для стенда и первой езды: Greenworks shell, hoverboard axle, ESP32, ELRS, UART, локальный контур управления.</p>
+        <h2>Площадка для первого рывка на железном подвесе</h2>
+        <p>Не учебный чертёж, а рабочий контур для стенда и первых километров: Greenworks shell, hoverboard axle, ESP32, ELRS, UART.</p>
       </div>
       <figure class="artifact__frame">
         <img src="/assets/kosar-mvp-drive-greenpunk.webp" alt="Rustpunk MVP-арт: Greenworks shell, hoverboard axle, ESP32, ELRS, UART и локальное управление">
         <figcaption>
-          <b>Local control, local stack.</b>
-          <span>Собранный наглядный ориентир по компоновке и инженерному контуру управления.</span>
+          <b>Контур в железе, не в облаке.</b>
+          <span>Прямой ориентир по компоновке, проводам и тому, как эта штука едет.</span>
         </figcaption>
       </figure>
     </section>
@@ -242,7 +242,7 @@
       <div class="repo__panel">
         <p class="eyebrow">open build</p>
         <h2>Прошивка, патчи и runbook лежат на GitHub</h2>
-        <p>Внутри: ESP32 web firmware, hoverboard FOC patch, гаражный runbook, wiring notes, dashboard landing и будущий telemetry contract.</p>
+        <p>Внутри: ESP32 firmware, hoverboard FOC patch, гаражный runbook, wiring notes, landing и контракт телеметрии.</p>
         <pre><code>git clone https://github.com/d3xr/kosar.git
 cd kosar/firmware/esp32-crsf-web
 pio run</code></pre>
@@ -268,8 +268,8 @@ pio run</code></pre>
   </main>
 
   <footer class="footer">
-    <span>Косарь / built from scrap, failsafe under test</span>
-    <span>By Искандер / d3xr + Codex as garage copilot</span>
+    <span>Косарь / железо с хлама, управляемое в гараже</span>
+    <span>By Искандер / d3xr + Codex, гаражный co-pilot</span>
     <span><a href="https://t.me/shkaf50" target="_blank" rel="me noreferrer">Шкаф с недоделками</a></span>
   </footer>
 

@@ -15,9 +15,9 @@ labels.forEach((label, index) => {
 
 const logLines = [
   ['boot', 'Kosar dashboard mock replay online'],
-  ['wifi', 'read-only public surface, local motor control'],
-  ['hover', 'uart telemetry contract pending'],
-  ['safety', 'blade physically off for MVP'],
+  ['wifi', 'public site наблюдает, управление остается на ESP32'],
+  ['hover', 'uart telemetry contract собирается'],
+  ['stack', 'моторный контур локальный, драйв локальный'],
 ];
 
 let tick = 0;
