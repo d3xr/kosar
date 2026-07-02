@@ -6,7 +6,6 @@
 
 - `agent_docs/development-history/`
 - `agent_docs/adr/`
-- будущие `agent_docs/audits/`
 - будущие `agent_docs/investigations/`
 
 ## Где не применять

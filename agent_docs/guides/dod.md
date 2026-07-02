@@ -9,12 +9,11 @@
 - [ ] Для значимого решения добавлена запись в `agent_docs/adr/`.
 - [ ] Запущены релевантные проверки или явно указано, почему они не запускались.
 
-## Для сайта
+## Для локального dashboard
 
-- [ ] Локально открывается `apps/kosar-dashboard/public/index.html`.
-- [ ] Ссылки на GitHub, `Шкаф`, assets, manifest, sitemap и `llms.txt` актуальны.
-- [ ] Public surface остаётся read-only.
-- [ ] Copy соответствует `docs/landing-design-code.md`.
+- [ ] ESP32 web UI открывается локально (`kosar.local` или IP устройства).
+- [ ] Channels, Motors, Hover, Logs, Network не ломаются.
+- [ ] Motor-control endpoints остаются локальными и gated.
 
 ## Для firmware
 

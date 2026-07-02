@@ -81,19 +81,24 @@ firmware/patches/stage1-safe-usart3-config.patch
 
 [docs/mechanical-mvp-drive-module.md](docs/mechanical-mvp-drive-module.md)
 
-## Публичный лендинг и dashboard
+## Что лежит в GitHub
 
-Статический Rustpunk Cozy лендинг лежит тут:
+- Dashboard/control: локальная веб-морда внутри [firmware/esp32-crsf-web](firmware/esp32-crsf-web).
+- Прошивка 1: ESP32 bridge для ELRS/CRSF, web debug и UART hoverboard.
+- Прошивка 2: hoverboard FOC `VARIANT_USART` workflow через upstream checkout и патчи в [firmware/patches](firmware/patches).
+- Железо: runbook, wiring notes, mechanical MVP и telemetry contract в [docs](docs).
 
-[apps/kosar-dashboard](apps/kosar-dashboard)
-
-Live: [https://kosar.vyroslo.ru](https://kosar.vyroslo.ru)
-
-Он хостится на твоём Timeweb-сервере как read-only витрина с mock telemetry. Управление моторами наружу не выносится.
+## Dashboard и telemetry
 
 Telemetry contract:
 
 [docs/telemetry-contract.md](docs/telemetry-contract.md)
+
+Локальный dashboard живёт внутри ESP32-прошивки:
+
+[firmware/esp32-crsf-web](firmware/esp32-crsf-web)
+
+Он нужен для гаража: каналы, мотор-тест, hoverboard status, логи и network/debug.
 
 ## Agent docs
 

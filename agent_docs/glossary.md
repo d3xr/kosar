@@ -9,8 +9,6 @@
 | Hoverboard controller | YK97/GD32F103-class плата гироскутера | Drive |
 | Sideboard UART | UART-пины hoverboard sideboard connector | ESP32 to hoverboard |
 | Cockpit | Web UI для каналов, моторов, статусов и логов | ESP32/local dashboard |
-| Public landing | `kosar.vyroslo.ru`, read-only витрина проекта | Site |
-| Rustpunk Cozy | Визуальный стиль сайта | Design |
 
 ## Аббревиатуры
 
@@ -27,6 +25,5 @@
 ## Кодовые названия и ссылки
 
 - `Шкаф` — build-in-public Telegram channel: `https://t.me/shkaf50`.
-- `kosar.vyroslo.ru` — public landing.
 - `d3xr/kosar` — GitHub repository.
 - `2030ai-project-template` — агентный repo template, применённый к проекту.
